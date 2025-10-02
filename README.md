@@ -89,10 +89,6 @@ Mở trình duyệt và truy cập: **http://localhost:3000**
 - **Icons**: Emoji icons
 - **Charts**: Canvas API
 
-## 📄 Báo cáo Frontend
-
-- Xem chi tiết: [FE_BáoCáo](./FE_BaoCao.md)
-
 ## 📝 Scripts có sẵn
 
 ```bash
