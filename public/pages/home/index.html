@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>IoT ESP Control - Home</title>
+  <link rel="stylesheet" href="/assets/css/common.css">
+  <link rel="stylesheet" href="/assets/css/home.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="app">
+
+    <!-- SIDEBAR -->
+    <div id="sidebar"></div>
+
+    <!-- MAIN COLUMN -->
+    <main class="main-column">
+      <div id="topbar"></div>
+
+      <div class="dashboard">
+        <!-- Cards -->
+        <div class="cards-row">
+          <div class="card card-temp">
+            <div class="card-emoji"><img src="/assets/icons/temperature.png" alt="Temperature" class="icon-24"></div>
+            <div class="card-title">Temperature</div>
+            <div class="card-value" id="tempValue">33.6°</div>
+          </div>
+          <div class="card card-light">
+            <div class="card-emoji"><img src="/assets/icons/light.png" alt="Light" class="icon-24"></div>
+            <div class="card-title">Light</div>
+            <div class="card-value" id="lightValue">543 Lux</div>
+          </div>
+          <div class="card card-humi">
+            <div class="card-emoji"><img src="/assets/icons/humidity.png" alt="Humidity" class="icon-24"></div>
+            <div class="card-title">Humidity</div>
+            <div class="card-value" id="humiValue">36 %</div>
+          </div>
+        </div>
+
+        <!-- Chart + Controls -->
+        <div class="table-panel">
+          <div class="content-row">
+            <div class="chart-panel">
+              <canvas id="homeChart"></canvas>
+            </div>
+            <div class="controls-col">
+              <div class="control-pill device-ac">
+                <div class="ctrl-left"><img src="/assets/icons/ac.png" alt="AC" class="icon-20"></div>
+                <div class="toggle off" onclick="toggleSwitch(this)">
+                  <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                  <div class="toggle-label">OFF</div>
+                </div>
+              </div>
+              <div class="control-pill device-light">
+                <div class="ctrl-left"><img src="/assets/icons/light.png" alt="Light" class="icon-20"></div>
+                <div class="toggle off" onclick="toggleSwitch(this)">
+                  <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                  <div class="toggle-label">OFF</div>
+                </div>
+              </div>
+              <div class="control-pill device-fan">
+                <div class="ctrl-left"><img src="/assets/icons/fan.png" alt="Fan" class="icon-20"></div>
+                <div class="toggle off" onclick="toggleSwitch(this)">
+                  <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                  <div class="toggle-label">OFF</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/component-loader.js"></script>
+  <script src="/assets/js/home.js"></script>
+</body>
+</html>
+

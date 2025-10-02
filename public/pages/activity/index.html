@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>IoT ESP Control - Data Activity</title>
+  <link rel="stylesheet" href="/assets/css/common.css">
+  <link rel="stylesheet" href="/assets/css/activity.css">
+</head>
+<body>
+  <div class="app">
+
+    <!-- SIDEBAR -->
+    <div id="sidebar"></div>
+
+    <!-- MAIN COLUMN -->
+    <main class="main-column">
+      <div id="topbar"></div>
+
+      <!-- DASHBOARD (TABLE) -->
+      <div class="dashboard">
+        <div class="table-panel">
+          <div class="table-title">Data Activity</div>
+
+          <!-- Filters -->
+          <div class="filters">
+            <select id="deviceSelect">
+              <option value="all">Thiết Bị</option>
+              <option value="Đèn">Đèn</option>
+              <option value="Quạt">Quạt</option>
+              <option value="Điều hòa">Điều hòa</option>
+            </select>
+            <select id="statusSelect">
+              <option value="all">Trạng thái</option>
+              <option value="ON">ON</option>
+              <option value="OFF">OFF</option>
+            </select>
+            <input type="text" id="searchTime" placeholder="yyyy/dd/mm 12:30:26">
+            <button onclick="searchData()">Tìm Kiếm</button>
+            <button onclick="resetData()" style="background: #4d3ce7;">Quay lại</button>
+          </div>
+
+          <!-- Table -->
+          <div class="table-wrap">
+            <table class="sensor-table" id="activityTable">
+              <thead>
+                <tr>
+                  <th>
+                    ID
+                    <button class="sort-toggle" data-field="id" onclick="toggleSort('id')" title="Sắp xếp">▲</button>
+                  </th>
+                  <th>Thiết Bị</th>
+                  <th>Trạng thái</th>
+                  <th>
+                    Thời gian
+                    <button class="sort-toggle" data-field="created_at" onclick="toggleSort('created_at')" title="Sắp xếp">▲</button>
+                  </th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+
+          <!-- Pagination -->
+          <div id="pagination" class="pagination"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/component-loader.js"></script>
+  <script src="/assets/js/activity.js"></script>
+</body>
+</html>
+

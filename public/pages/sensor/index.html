@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>IoT ESP Control - Data Sensor</title>
+  <link rel="stylesheet" href="/assets/css/common.css">
+  <link rel="stylesheet" href="/assets/css/sensor.css">
+</head>
+<body>
+  <div class="app">
+    <!-- SIDEBAR -->
+    <div id="sidebar"></div>
+
+    <!-- MAIN COLUMN -->
+    <main class="main-column">
+      <div id="topbar"></div>
+
+      <!-- DASHBOARD -->
+      <div class="dashboard">
+        <!-- Table Section -->
+        <div class="table-panel">
+          <div class="table-title">Data Sensor</div>
+
+          <!-- Filters -->
+          <div class="filters">
+            <div class="input-group">
+              <select id="sortField">
+                <option value="id">Trong Sensor</option>
+                <option value="temp">Nhiệt Độ</option>
+                <option value="humi">Độ Ẩm</option>
+                <option value="light">Ánh Sáng</option>
+              </select>
+              <input type="text" id="searchTime" placeholder="Tìm kiếm theo loại đã chọn...">
+            </div>
+            <button onclick="searchData()">Tìm Kiếm</button>
+            <button onclick="resetData()" style="background: #4d3ce7;">Quay lại</button>
+          </div>
+
+          <!-- Table -->
+          <div class="table-wrap">
+            <table class="sensor-table" id="sensorTable">
+              <thead>
+                <tr>
+                  <th>
+                    ID
+                    <button class="sort-toggle" data-field="id" onclick="toggleSort('id')" title="Sắp xếp">▲</button>
+                  </th>
+                  <th>
+                    Nhiệt Độ (°C)
+                    <button class="sort-toggle" data-field="temp" onclick="toggleSort('temp')" title="Sắp xếp">▲</button>
+                  </th>
+                  <th>
+                    Độ Ẩm (%)
+                    <button class="sort-toggle" data-field="humi" onclick="toggleSort('humi')" title="Sắp xếp">▲</button>
+                  </th>
+                  <th>
+                    Ánh Sáng (Lux)
+                    <button class="sort-toggle" data-field="light" onclick="toggleSort('light')" title="Sắp xếp">▲</button>
+                  </th>
+                  <th>
+                    Thời Gian
+                    <button class="sort-toggle" data-field="created_at" onclick="toggleSort('created_at')" title="Sắp xếp">▲</button>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Dữ liệu sẽ được render bởi JavaScript -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination -->
+          <div id="pagination" class="pagination"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/component-loader.js"></script>
+  <script src="/assets/js/sensor.js"></script>
+</body>
+</html>

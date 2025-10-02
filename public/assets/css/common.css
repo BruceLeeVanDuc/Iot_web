@@ -1,0 +1,191 @@
+/* ===== SHARED CSS FOR SIDEBAR & TOPBAR ===== */
+/* CSS chung cho sidebar và topbar - được sử dụng bởi tất cả trang */
+
+:root {
+  --blue: #6fb6ff;
+  --blue-dark: #3d9df6;
+  --bg: #efefef;
+  --muted: #777;
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --radius: 14px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: "Poppins", sans-serif;
+}
+
+body {
+  background: var(--bg);
+  display: flex;
+  justify-content: center;
+  padding: 20px;
+  color: #222;
+}
+
+/* Layout tổng */
+.app {
+  width: 95%;
+  max-width: 1600px;
+  min-width: 1200px;
+  display: flex;
+  gap: 20px;
+}
+
+/* ===== SIDEBAR STYLES ===== */
+.sidebar {
+  width: 120px;
+  background: linear-gradient(180deg, var(--blue-dark), var(--blue));
+  border-radius: 24px;
+  padding: 20px 10px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: fit-content;
+  min-height: calc(100vh - 37px);
+  position: sticky;
+  top: 20px;
+}
+
+.sidebar-inner {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.logo-circle {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 20px;
+  color: #fff;
+  font-weight: 700;
+}
+
+.side-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 100%;
+}
+
+.nav-item {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  padding: 10px 0;
+  border-radius: 12px;
+  text-decoration: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.3s ease;
+}
+
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-2px);
+}
+
+.nav-item.active {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.iot-badge {
+  margin-top: auto;
+  width: 84%;
+}
+
+.iot-badge img {
+  width: 100%;
+  border-radius: 12px;
+}
+
+/* ===== MAIN COLUMN ===== */
+.main-column {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ===== TOPBAR STYLES ===== */
+.topbar {
+  background: var(--blue);
+  height: 60px;
+  border-radius: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 20px;
+  color: #fff;
+  font-weight: 600;
+  box-shadow: var(--shadow);
+}
+
+.top-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.top-icon {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+}
+
+.avatar-link {
+  text-decoration: none;
+  transition: all 0.3s ease;
+}
+
+.avatar-link:hover {
+  transform: scale(1.1);
+}
+
+.avatar-link:hover .avatar {
+  border-color: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 1200px) {
+  .app {
+    width: 98%;
+    min-width: 1000px;
+  }
+}
+
+@media (max-width: 1000px) {
+  .app {
+    min-width: 800px;
+  }
+  .sidebar {
+    width: 80px;
+  }
+}

@@ -1,0 +1,574 @@
+{
+	"info": {
+		"_postman_id": "12345678-1234-1234-1234-123456789abc",
+		"name": "IoT ESP Control API",
+		"description": "API cho hệ thống điều khiển thiết bị IoT ESP32 - Dự án Fe IoT",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Health & Status",
+			"item": [
+				{
+					"name": "API Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/health",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"health"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Server Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/status",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"status"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "MQTT Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/mqtt/health",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"mqtt",
+								"health"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Database Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/db/health",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"db",
+								"health"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Telemetry APIs",
+			"item": [
+				{
+					"name": "Send Telemetry Data",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"deviceId\": \"ESP32_001\",\n  \"data\": {\n    \"temp\": 25.5,\n    \"humi\": 60.2,\n    \"light\": 800\n  },\n  \"timestamp\": \"2024-01-15T10:30:00.000Z\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/telemetry",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"telemetry"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Telemetry Data",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/telemetry?limit=50&deviceId=ESP32_001",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"telemetry"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "50"
+								},
+								{
+									"key": "deviceId",
+									"value": "ESP32_001"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Latest Telemetry",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/telemetry/latest?deviceId=ESP32_001",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"telemetry",
+								"latest"
+							],
+							"query": [
+								{
+									"key": "deviceId",
+									"value": "ESP32_001"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Telemetry Statistics",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/telemetry/stats?deviceId=ESP32_001&hours=24",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"telemetry",
+								"stats"
+							],
+							"query": [
+								{
+									"key": "deviceId",
+									"value": "ESP32_001"
+								},
+								{
+									"key": "hours",
+									"value": "24"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Search Telemetry Data",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/telemetry/search?deviceId=ESP32_001&field=temp&value=25&limit=10",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"telemetry",
+								"search"
+							],
+							"query": [
+								{
+									"key": "deviceId",
+									"value": "ESP32_001"
+								},
+								{
+									"key": "field",
+									"value": "temp"
+								},
+								{
+									"key": "value",
+									"value": "25"
+								},
+								{
+									"key": "limit",
+									"value": "10"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Copy Time",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"timeString\": \"2024-01-15 10:30:00\",\n  \"recordId\": 123\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/telemetry/copy-time",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"telemetry",
+								"copy-time"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Control APIs",
+			"item": [
+				{
+					"name": "Create Device Command",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"device\": \"ESP32_001\",\n  \"status\": \"on\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/control",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"control"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Commands",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/control?limit=50&device=ESP32_001&status=on",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"control"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "50"
+								},
+								{
+									"key": "device",
+									"value": "ESP32_001"
+								},
+								{
+									"key": "status",
+									"value": "on"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Pending Commands",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/control/pending?deviceId=ESP32_001",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"control",
+								"pending"
+							],
+							"query": [
+								{
+									"key": "deviceId",
+									"value": "ESP32_001"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Device Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/control/status/ESP32_001",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"control",
+								"status",
+								"ESP32_001"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Device States",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/device-states?deviceId=ESP32_001",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"device-states"
+							],
+							"query": [
+								{
+									"key": "deviceId",
+									"value": "ESP32_001"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Command",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"device\": \"ESP32_001\",\n  \"status\": \"off\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/control/1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"control",
+								"1"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Command",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/control/1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"control",
+								"1"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Acknowledge Command",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"acknowledged\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/control/1/ack",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"control",
+								"1",
+								"ack"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3000",
+			"type": "string"
+		},
+		{
+			"key": "api_token",
+			"value": "your_api_token_here",
+			"type": "string"
+		}
+	]
+}

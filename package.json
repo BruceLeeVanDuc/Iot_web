@@ -1,0 +1,35 @@
+{
+  "name": "iot-esp-control",
+  "version": "1.0.0",
+  "description": "IoT ESP Control Dashboard - Hệ thống quản lý thiết bị IoT",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "nodemon server/index.js"
+  },
+  "keywords": [
+    "iot",
+    "esp32",
+    "dashboard",
+    "sensor",
+    "control"
+  ],
+  "author": "Lê Văn Đức",
+  "license": "MIT",
+  "dependencies": {
+    "@fortawesome/fontawesome-free": "^7.0.1",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.2",
+    "express": "^4.21.2",
+    "mqtt": "^5.10.1",
+    "mysql2": "^3.14.5",
+    "node-fetch": "^2.7.0"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
