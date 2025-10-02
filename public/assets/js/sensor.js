@@ -1,5 +1,27 @@
 // API endpoint
 const API_BASE = `${location.origin}/api`;
+
+// Token helpers (reuse simple approach like home.js)
+function getUrlToken() {
+  try { const u = new URL(location.href); return u.searchParams.get('token'); } catch (_) { return null; }
+}
+function persistTokenFromUrlIfPresent() {
+  const t = getUrlToken();
+  if (t && t.trim()) localStorage.setItem('apiToken', t.trim());
+}
+function ensureApiToken() {
+  persistTokenFromUrlIfPresent();
+  let t = localStorage.getItem('apiToken');
+  if (!t) {
+    t = window.prompt('Nhập API token để kết nối server:', '');
+    if (t && t.trim()) {
+      localStorage.setItem('apiToken', t.trim());
+      location.replace(location.pathname + location.search);
+      return false;
+    }
+  }
+  return true;
+}
 let sensorData = [];
 let currentPage = 1;
 let itemsPerPage = 10; // số bản ghi/trang (có thể thay đổi 10/20/50)
@@ -480,6 +502,8 @@ function showCopyNotification(message) {
 
 // gán sự kiện cho nút
 document.addEventListener("DOMContentLoaded", () => {
+  const ok = ensureApiToken();
+  if (!ok) return;
   loadSensorData(false, true); // initial load without overlay, forceRefresh = true
   
   // chọn số bản ghi/trang (10/20/50)
@@ -496,8 +520,41 @@ document.addEventListener("DOMContentLoaded", () => {
   // tìm kiếm
   document.querySelector(".filters button").addEventListener("click", searchData);
 
-  // Auto refresh mỗi 10s (khi không ở chế độ tìm theo cảm biến) - giảm tải cho MySQL
-  refreshTimerId = setInterval(() => {
-    loadSensorData(false); // silent auto-refresh without overlay
-  }, 10000);
+  // Thiết lập SSE để nhận realtime; fallback sang polling nếu lỗi
+  try {
+    const token = localStorage.getItem('apiToken') || 'esp32_secure_token_2024';
+    const es = new EventSource(`/api/telemetry/stream?token=${encodeURIComponent(token)}`);
+
+    es.onmessage = (e) => {
+      try {
+        const payload = JSON.parse(e.data);
+        // Map về format FE đang dùng
+        const mapped = mapSensorData({
+          id: payload.id || Date.now(),
+          temperature: payload.temp,
+          humidity: payload.humi,
+          light: payload.light,
+          createdAt: payload.createdAt
+        });
+        // Thêm lên đầu danh sách
+        sensorData.unshift(mapped);
+        filteredData = [...sensorData];
+        currentPage = 1;
+        renderTable();
+      } catch (_) {}
+    };
+
+    es.onerror = () => {
+      // Nếu stream lỗi, đóng và bật polling mỗi 10s
+      try { es.close(); } catch (_) {}
+      if (!refreshTimerId) {
+        refreshTimerId = setInterval(() => { loadSensorData(false); }, 10000);
+      }
+    };
+  } catch (_) {
+    // Fallback polling nếu trình duyệt không hỗ trợ EventSource
+    if (!refreshTimerId) {
+      refreshTimerId = setInterval(() => { loadSensorData(false); }, 10000);
+    }
+  }
 });

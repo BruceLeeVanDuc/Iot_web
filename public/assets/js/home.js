@@ -4,14 +4,42 @@ const DEVICE_ID = 'esp32-001';
 const HISTORY_LIMIT = 50;
 const UPDATE_INTERVAL = 5000;
 
-// API Token configuration
-const API_TOKEN = localStorage.getItem('apiToken') || 'esp32_secure_token_2024';
+// Token helpers: read from URL ?token=..., persist to localStorage, then use dynamically
+function getUrlToken() {
+  try {
+    const u = new URL(location.href);
+    return u.searchParams.get('token');
+  } catch (_) { return null; }
+}
 
-// Helper function to get headers with token
+function persistTokenFromUrlIfPresent() {
+  const t = getUrlToken();
+  if (t && t.trim()) {
+    localStorage.setItem('apiToken', t.trim());
+  }
+}
+
+function ensureApiToken() {
+  persistTokenFromUrlIfPresent();
+  let t = localStorage.getItem('apiToken');
+  if (!t) {
+    t = window.prompt('Nhập API token để kết nối server:', '');
+    if (t && t.trim()) {
+      localStorage.setItem('apiToken', t.trim());
+      // Reload để mọi request dùng token mới
+      location.replace(location.pathname + location.search);
+      return false;
+    }
+  }
+  return true;
+}
+
+// Helper function to get headers with token (dynamic)
 function getAuthHeaders() {
+  const token = localStorage.getItem('apiToken') || '';
   return {
     'Content-Type': 'application/json',
-    'x-api-token': API_TOKEN
+    'x-api-token': token
   };
 }
 
@@ -377,6 +405,9 @@ function restoreFromLocalStorage() {
 let sensorChart;
 
 async function initApp() {
+  // Ensure we have a token (from URL or prompt once)
+  const ok = ensureApiToken();
+  if (!ok) return; // page will reload if user entered token
   // Initialize chart
   sensorChart = new SensorChart('homeChart');
   

@@ -1,5 +1,27 @@
 // API endpoint
 const API_BASE = `${location.origin}/api`;
+
+// Token helpers similar to other pages
+function getUrlToken() {
+  try { const u = new URL(location.href); return u.searchParams.get('token'); } catch (_) { return null; }
+}
+function persistTokenFromUrlIfPresent() {
+  const t = getUrlToken();
+  if (t && t.trim()) localStorage.setItem('apiToken', t.trim());
+}
+function ensureApiToken() {
+  persistTokenFromUrlIfPresent();
+  let t = localStorage.getItem('apiToken');
+  if (!t) {
+    t = window.prompt('Nhập API token để kết nối server:', '');
+    if (t && t.trim()) {
+      localStorage.setItem('apiToken', t.trim());
+      location.replace(location.pathname + location.search);
+      return false;
+    }
+  }
+  return true;
+}
 let activityData = [];
 let currentPage = 1;
 let itemsPerPage = 10; // số bản ghi/trang (có thể thay đổi 10/20/50)
@@ -351,6 +373,8 @@ function showCopyNotification(message) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  const ok = ensureApiToken();
+  if (!ok) return;
   loadActivityData(); // Load data from API instead of dummy data
   updateSortIndicators();
 

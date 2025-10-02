@@ -1,5 +1,9 @@
 const mqtt = require('mqtt');
 const db = require('../db');
+const EventEmitter = require('events');
+
+// Simple event bus to broadcast new telemetry to SSE clients
+const telemetryBus = new EventEmitter();
 
 // MQTT client configuration
 const MQTT_URL = process.env.MQTT_URL || `mqtt://${process.env.MQTT_HOST || 'localhost'}:${process.env.MQTT_PORT || 1883}`;
@@ -137,9 +141,24 @@ async function handleSensorData(message) {
         // Insert into database
         const TELEMETRY_TABLE = process.env.TABLE_TELEMETRY || 'telemetry';
         const sql = `INSERT INTO ${TELEMETRY_TABLE} (device_id, temp, humi, light, created_at) VALUES (?, ?, ?, ?, ?)`;
-        const params = [deviceId, temp, humi, light, new Date()];
+        const createdAt = new Date();
+        const params = [deviceId, temp, humi, light, createdAt];
         
-        await db.query(sql, params);
+        const result = await db.query(sql, params);
+        
+        // Emit telemetry event for SSE subscribers
+        try {
+            telemetryBus.emit('telemetry', {
+                id: result && result.insertId ? result.insertId : undefined,
+                deviceId,
+                temp,
+                humi,
+                light,
+                createdAt
+            });
+        } catch (emitErr) {
+            // Avoid breaking the flow if no listeners
+        }
         
     } catch (err) {
         console.error('[MQTT] Error handling sensor data:', err);
@@ -153,5 +172,6 @@ module.exports = {
     initializeMqttClient,
     publishDeviceCommand,
     handleSensorData,
-    MQTT_URL
+    MQTT_URL,
+    telemetryBus
 };

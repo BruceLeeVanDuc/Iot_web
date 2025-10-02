@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { requireApiToken } = require('../middleware/auth');
+const { telemetryBus } = require('../utils/mqtt');
 
 // Table names from env with sensible defaults
 const TELEMETRY_TABLE = process.env.TABLE_TELEMETRY || 'telemetry';
@@ -189,7 +190,7 @@ router.get('/telemetry/stats', requireApiToken, async (req, res) => {
 // GET /api/telemetry/search -> search exact match by a specific column (temp/humi/light)
 router.get('/telemetry/search', requireApiToken, async (req, res) => {
     try {
-        const { deviceId, field = 'temp', value, limit = 100 } = req.query;
+        const { deviceId, field = 'temp', value, limit = 100, tolerance } = req.query;
 
         const columnMap = { temp: 'temp', humi: 'humi', light: 'light' };
         const col = columnMap[String(field).toLowerCase()];
@@ -201,8 +202,21 @@ router.get('/telemetry/search', requireApiToken, async (req, res) => {
             return res.status(400).json({ error: 'value is required' });
         }
 
-        const clauses = [`${col} = ?`];
-        const params = [Number(value)];
+        // Use numeric tolerance to avoid floating point exact-match issues
+        const numericValue = Number(value);
+        if (!Number.isFinite(numericValue)) {
+            return res.status(400).json({ error: 'value must be a number' });
+        }
+
+        // Default tolerance: 0.05 for temp/humi (one decimal), 1 for light (integer)
+        const defaultTol = col === 'light' ? 1 : 0.05;
+        const tol = Math.abs(Number(tolerance)) || defaultTol;
+
+        const minVal = numericValue - tol;
+        const maxVal = numericValue + tol;
+
+        const clauses = [`${col} BETWEEN ? AND ?`];
+        const params = [minVal, maxVal];
 
         if (deviceId) {
             clauses.push('device_id = ?');
@@ -215,6 +229,7 @@ router.get('/telemetry/search', requireApiToken, async (req, res) => {
         const sql = `SELECT id, device_id AS deviceId, temp AS temperature, humi AS humidity, light, created_at AS createdAt
                      FROM ${TELEMETRY_TABLE}
                      ${where}
+                     ORDER BY id DESC
                      LIMIT ${lim}`;
 
         const rows = await db.query(sql, params);
@@ -253,3 +268,37 @@ router.post('/telemetry/copy-time', requireApiToken, async (req, res) => {
 });
 
 module.exports = router;
+ 
+// SSE stream for realtime telemetry
+router.get('/telemetry/stream', requireApiToken, (req, res) => {
+    // Set SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    if (res.flushHeaders) res.flushHeaders();
+
+    const send = (payload) => {
+        try {
+            res.write(`data: ${JSON.stringify(payload)}\n\n`);
+        } catch (_) {
+            // ignore write errors; close will cleanup
+        }
+    };
+
+    // Optional heartbeat to keep connection alive
+    const heartbeatId = setInterval(() => {
+        try { res.write(`: ping\n\n`); } catch (_) {}
+    }, 15000);
+
+    const onTelemetry = (payload) => {
+        send(payload);
+    };
+
+    telemetryBus.on('telemetry', onTelemetry);
+
+    req.on('close', () => {
+        clearInterval(heartbeatId);
+        telemetryBus.off('telemetry', onTelemetry);
+        try { res.end(); } catch (_) {}
+    });
+});
