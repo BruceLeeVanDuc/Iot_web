@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
       
       // Tạo link tải xuống PDF từ Google Drive
       const link = document.createElement('a');
-      link.href = 'https://drive.google.com/uc?export=download&id=1Ega9BGPqSiYGZsDR6hp2_IC5iEZDhcHS';
+      link.href = 'https://drive.google.com/file/d/1R2kMJA8EZdUH4SmQQzmPR-DekCDb_FX7/view?usp=drive_link';
       link.download = 'BaoCao_Website_IoT_LeVanDuc.pdf'; // Tên file khi tải xuống
       link.target = '_blank';
       

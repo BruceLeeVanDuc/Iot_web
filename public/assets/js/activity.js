@@ -1,9 +1,13 @@
-// API endpoint
 const API_BASE = `${location.origin}/api`;
 
-// Token helpers similar to other pages
+// Token helpers
 function getUrlToken() {
-  try { const u = new URL(location.href); return u.searchParams.get('token'); } catch (_) { return null; }
+  try {
+    const u = new URL(location.href);
+    return u.searchParams.get('token');
+  } catch (_) {
+    return null;
+  }
 }
 function persistTokenFromUrlIfPresent() {
   const t = getUrlToken();
@@ -22,124 +26,174 @@ function ensureApiToken() {
   }
   return true;
 }
+
 let activityData = [];
 let currentPage = 1;
-let itemsPerPage = 10; // số bản ghi/trang (có thể thay đổi 10/20/50)
+let itemsPerPage = 10;
 let filteredData = [];
-// Removed desiredPageCount - now using itemsPerPage like Sensor
 
+// =================================================================
+// ⭐️ HÀM XỬ LÝ THỜI GIAN NGẮN GỌN (DÙNG DAYJS)
+// =================================================================
 
-// Helper: parse time input to since/until ISO
+// Kích hoạt plugin
+dayjs.extend(dayjs_plugin_customParseFormat);
+dayjs.extend(dayjs_plugin_utc);
+dayjs.extend(dayjs_plugin_timezone);
+
+// Múi giờ Việt Nam
+const TZ = 'Asia/Ho_Chi_Minh';
+
+// Các định dạng hỗ trợ
+const PARSERS = [
+  { format: 'YYYY-MM-DD HH:mm:ss', unit: 's' },
+  { format: 'YYYY/MM/DD HH:mm:ss', unit: 's' },
+  { format: 'YYYY-MM-DD HH:mm', unit: 'm' },
+  { format: 'YYYY/MM/DD HH:mm', unit: 'm' },
+  { format: 'YYYY-MM-DD', unit: 'd' },
+  { format: 'YYYY/MM/DD', unit: 'd' },
+  { format: 'DD-MM-YYYY HH:mm:ss', unit: 's' },
+  { format: 'DD/MM/YYYY HH:mm:ss', unit: 's' },
+  { format: 'DD-MM-YYYY HH:mm', unit: 'm' },
+  { format: 'DD/MM/YYYY HH:mm', unit: 'm' },
+  { format: 'DD-MM-YYYY', unit: 'd' },
+  { format: 'DD/MM/YYYY', unit: 'd' },
+  { format: 'MM-YYYY', unit: 'M' },
+  { format: 'MM/YYYY', unit: 'M' },
+  { format: 'HH:mm:ss', unit: 's', today: true },
+  { format: 'HH:mm', unit: 'm', today: true },
+  { format: 'HH', unit: 'h', today: true },
+];
+
 function buildSinceUntilFromInput(raw) {
   if (!raw) return { since: null, until: null };
   const str = raw.trim();
-  const s = str.replace(/\s+/g, '');
-  const now = new Date();
-  const toIso = d => new Date(d).toISOString();
 
-  let m = s.match(/^(\d{4})[-\/]?(\d{1,2})[-\/]?(\d{1,2})$/);
-  if (m) {
-    const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
-    return { since: toIso(new Date(y, mo - 1, d, 0, 0, 0, 0)), until: toIso(new Date(y, mo - 1, d, 23, 59, 59, 999)) };
+  for (const parser of PARSERS) {
+    let m;
+    if (parser.today) {
+      // Với format chỉ có thời gian (HH:mm:ss), parse theo giờ hiện tại
+      const now = dayjs().tz(TZ);
+      const timeParts = str.split(':');
+      let hour = parseInt(timeParts[0]) || 0;
+      let minute = parseInt(timeParts[1]) || 0;
+      let second = parseInt(timeParts[2]) || 0;
+      m = now.hour(hour).minute(minute).second(second).millisecond(0);
+    } else {
+      // Parse với format đầy đủ (có ngày tháng)
+      // Parse theo local time trước, sau đó set timezone
+      m = dayjs(str, parser.format, true);
+      if (m.isValid()) {
+        // Convert sang timezone VN, giả định input là local time của VN
+        m = dayjs.tz(m.format('YYYY-MM-DD HH:mm:ss'), TZ);
+      }
+    }
+
+    if (m && m.isValid()) {
+      return {
+        since: m.startOf(parser.unit).toISOString(),
+        until: m.endOf(parser.unit).toISOString(),
+      };
+    }
   }
-  m = s.match(/^(\d{1,2})[-\/]?(\d{1,2})[-\/]?(\d{4})$/);
-  if (m) {
-    const d = Number(m[1]), mo = Number(m[2]), y = Number(m[3]);
-    return { since: toIso(new Date(y, mo - 1, d, 0, 0, 0, 0)), until: toIso(new Date(y, mo - 1, d, 23, 59, 59, 999)) };
-  }
-  m = s.match(/^(\d{1,2})[-\/]?(\d{4})$/);
-  if (m) {
-    const mo = Number(m[1]), y = Number(m[2]);
-    return { since: toIso(new Date(y, mo - 1, 1, 0, 0, 0, 0)), until: toIso(new Date(y, mo, 0, 23, 59, 59, 999)) };
-  }
-  m = s.match(/^(\d{1,2})(?::(\d{1,2}))?(?::(\d{1,2}))?$/);
-  if (m) {
-    const h = Math.min(23, Number(m[1]));
-    const mi = m[2] ? Math.min(59, Number(m[2])) : 0;
-    const se = m[3] ? Math.min(59, Number(m[3])) : 0;
-    return { since: toIso(new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, mi, se, 0)), until: toIso(new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, mi, se, 999)) };
-  }
-  m = str.match(/^(\d{1,2})[-\/]?(\d{1,2})[-\/]?(\d{4})\s+(\d{1,2})(?::(\d{1,2}))?(?::(\d{1,2}))?$/);
-  if (m) {
-    const d = Number(m[1]), mo = Number(m[2]), y = Number(m[3]);
-    const h = Math.min(23, Number(m[4]));
-    const mi = m[5] ? Math.min(59, Number(m[5])) : 0;
-    const se = m[6] ? Math.min(59, Number(m[6])) : 0;
-    return { since: toIso(new Date(y, mo - 1, d, h, mi, se, 0)), until: toIso(new Date(y, mo - 1, d, h, mi, se, 999)) };
-  }
+
+  console.log('No pattern matched for input:', str);
   return { since: null, until: null };
 }
 
-// Load data from API with sort parameters
+// =================================================================
+// ⭐️ HÀM LOAD DỮ LIỆU
+// =================================================================
+
 let currentSortField = 'id';
 let currentSortOrder = 'desc';
 
 async function loadActivityData(sortField = null, sortOrder = null) {
   try {
-    const fetchLimit = 1000; // tải số bản ghi tối đa 1000
-    
-    // Build API URL with sort parameters
+    const fetchLimit = 1000;
     let apiUrl = `${API_BASE}/control?limit=${fetchLimit}`;
-    // Device/status filters from UI
+
     const device = document.getElementById('deviceSelect')?.value;
     const status = document.getElementById('statusSelect')?.value;
     const timeQuery = document.getElementById('searchTime')?.value?.trim();
+
     if (device && device !== 'all') apiUrl += `&device=${encodeURIComponent(device)}`;
     if (status && status !== 'all') apiUrl += `&status=${encodeURIComponent(status)}`;
-    // Optional time query -> if parseable, send since/until for server-side filtering
+
     const { since, until } = buildSinceUntilFromInput(timeQuery || '');
+    console.log('Time query:', timeQuery, 'Parsed:', { since, until });
     if (since) apiUrl += `&since=${encodeURIComponent(since)}`;
     if (until) apiUrl += `&until=${encodeURIComponent(until)}`;
+
     if ((sortField || currentSortField) && (sortOrder || currentSortOrder)) {
       const sf = sortField || currentSortField;
       const so = sortOrder || currentSortOrder;
       apiUrl += `&sortField=${sf}&sortOrder=${so}`;
     }
-    
+
     const response = await fetch(apiUrl, {
-      headers: {
-        'x-api-token': localStorage.getItem('apiToken') || 'demo-token'
-      }
+      headers: { 'x-api-token': localStorage.getItem('apiToken') || '' }
     });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`HTTP ${response.status} ${response.statusText} at ${apiUrl} -> ${text.slice(0,120)}`);
+    }
+
     const data = await response.json();
+
     activityData = data.map(item => {
       const createdAtDate = new Date(item.createdAt);
-      const year = createdAtDate.getFullYear();
-      const month = String(createdAtDate.getMonth() + 1).padStart(2, '0');
-      const day = String(createdAtDate.getDate()).padStart(2, '0');
-      const hour = String(createdAtDate.getHours()).padStart(2, '0');
-      const minute = String(createdAtDate.getMinutes()).padStart(2, '0');
-      const second = String(createdAtDate.getSeconds()).padStart(2, '0');
+      
+      // Format: DD/MM/YYYY HH:mm:ss (ngày trước)
+      const dateStr = createdAtDate.toLocaleDateString('vi-VN', {
+        timeZone: 'Asia/Ho_Chi_Minh',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      });
+      
+      const timeStr = createdAtDate.toLocaleTimeString('vi-VN', {
+        timeZone: 'Asia/Ho_Chi_Minh',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      });
+      
+      const vietnamTimeString = `${dateStr} ${timeStr}`;
 
       return {
         id: item.id,
         device: item.device,
         status: item.status,
-        time: `${day}/${month}/${year} ${hour}:${minute}:${second}`,
-        originalTime: createdAtDate // Lưu thời gian gốc để sắp xếp
+        time: vietnamTimeString,
+        originalTime: createdAtDate
       };
     });
-    
+
     filteredData = [...activityData];
     renderTable();
   } catch (error) {
     console.error('Error loading data:', error);
-    // Khi API lỗi, không dùng dữ liệu tĩnh; render bảng rỗng
     activityData = [];
     filteredData = [];
     renderTable();
   }
-  finally {
-    // Loading removed
-  }
 }
 
-const tbody = document.querySelector('#activityTable tbody');
+// =================================================================
+// RENDER TABLE + PHÂN TRANG
+// =================================================================
 
 function renderTable() {
+  const tbody = document.querySelector('#activityTable tbody');
+  if (!tbody) {
+    console.error('Table tbody not found');
+    return;
+  }
   tbody.innerHTML = '';
-  
-  // Kiểm tra nếu không có dữ liệu
+
   if (filteredData.length === 0) {
     const tr = document.createElement('tr');
     tr.innerHTML = '<td colspan="4" style="text-align: center; padding: 20px; color: #666; font-style: italic;">Không có dữ liệu</td>';
@@ -147,12 +201,11 @@ function renderTable() {
     updatePaginationControls();
     return;
   }
-  
-  // Calculate pagination
+
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const paginatedData = filteredData.slice(startIndex, endIndex);
-  
+
   paginatedData.forEach(r => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -166,20 +219,16 @@ function renderTable() {
     `;
     tbody.appendChild(tr);
   });
-  
-  // Update pagination controls
+
   updatePaginationControls();
 }
 
 function updatePaginationControls() {
   const totalPages = Math.ceil(filteredData.length / itemsPerPage) || 1;
   const paginationContainer = document.getElementById('pagination');
-  
   if (!paginationContainer) return;
-  
   paginationContainer.innerHTML = '';
-  
-  // Nếu không có dữ liệu, chỉ hiển thị thông tin
+
   if (filteredData.length === 0) {
     const pageInfo = document.createElement('span');
     pageInfo.textContent = 'Không có dữ liệu để hiển thị';
@@ -188,8 +237,7 @@ function updatePaginationControls() {
     paginationContainer.appendChild(pageInfo);
     return;
   }
-  
-  // Previous button
+
   const prevBtn = document.createElement('button');
   prevBtn.textContent = '« Trước';
   prevBtn.disabled = currentPage === 1;
@@ -200,23 +248,40 @@ function updatePaginationControls() {
     }
   });
   paginationContainer.appendChild(prevBtn);
-  
-  // Page numbers
-  const startPage = Math.max(1, currentPage - 2);
-  const endPage = Math.min(totalPages, currentPage + 2);
-  
-  for (let i = startPage; i <= endPage; i++) {
-    const pageBtn = document.createElement('button');
-    pageBtn.textContent = i;
-    pageBtn.className = i === currentPage ? 'active' : '';
-    pageBtn.addEventListener('click', () => {
-      currentPage = i;
+
+  const appendPageButton = (pageNumber) => {
+    const btn = document.createElement('button');
+    btn.textContent = pageNumber;
+    btn.className = pageNumber === currentPage ? 'active' : '';
+    btn.addEventListener('click', () => {
+      currentPage = pageNumber;
       renderTable();
     });
-    paginationContainer.appendChild(pageBtn);
+    paginationContainer.appendChild(btn);
+  };
+
+  const appendEllipsis = () => {
+    const span = document.createElement('span');
+    span.textContent = '…';
+    span.style.margin = '0 6px';
+    span.style.color = '#666';
+    paginationContainer.appendChild(span);
+  };
+
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i++) appendPageButton(i);
+  } else {
+    appendPageButton(1);
+    appendPageButton(2);
+    if (currentPage > 4) appendEllipsis();
+    const middleStart = Math.max(3, currentPage - 1);
+    const middleEnd = Math.min(totalPages - 2, currentPage + 1);
+    for (let i = middleStart; i <= middleEnd; i++) appendPageButton(i);
+    if (currentPage < totalPages - 3) appendEllipsis();
+    appendPageButton(totalPages - 1);
+    appendPageButton(totalPages);
   }
-  
-  // Next button
+
   const nextBtn = document.createElement('button');
   nextBtn.textContent = 'Sau »';
   nextBtn.disabled = currentPage === totalPages;
@@ -227,13 +292,12 @@ function updatePaginationControls() {
     }
   });
   paginationContainer.appendChild(nextBtn);
-  
-  // Page size selector sau nút "Sau"
+
   const pageSizeWrapper = document.createElement('span');
   pageSizeWrapper.style.marginLeft = '12px';
   const select = document.createElement('select');
   select.id = 'pageSizeSelect';
-  ['10','20','50'].forEach(v => {
+  ['10', '20', '50'].forEach(v => {
     const opt = document.createElement('option');
     opt.value = v;
     opt.textContent = `${v}/trang`;
@@ -247,15 +311,17 @@ function updatePaginationControls() {
   });
   pageSizeWrapper.appendChild(select);
   paginationContainer.appendChild(pageSizeWrapper);
-  
-  // Page info
+
   const pageInfo = document.createElement('span');
   pageInfo.textContent = `Trang ${currentPage} / ${totalPages} (${filteredData.length} bản ghi, ${itemsPerPage}/trang)`;
   pageInfo.className = 'page-info';
   paginationContainer.appendChild(pageInfo);
 }
 
-// Sort using API
+// =================================================================
+// SẮP XẾP & LỌC
+// =================================================================
+
 async function sortByApi(field = "id", order = "asc") {
   currentSortField = field;
   currentSortOrder = order;
@@ -263,8 +329,8 @@ async function sortByApi(field = "id", order = "asc") {
   await loadActivityData(field, order);
 }
 
-function toggleSort(field){
-  if (currentSortField === field){
+function toggleSort(field) {
+  if (currentSortField === field) {
     currentSortOrder = currentSortOrder === 'asc' ? 'desc' : 'asc';
   } else {
     currentSortField = field;
@@ -274,11 +340,11 @@ function toggleSort(field){
   sortByApi(currentSortField, currentSortOrder);
 }
 
-function updateSortIndicators(){
+function updateSortIndicators() {
   const buttons = document.querySelectorAll('.sort-toggle');
   buttons.forEach(btn => {
     const field = btn.getAttribute('data-field');
-    if (field === currentSortField){
+    if (field === currentSortField) {
       btn.textContent = currentSortOrder === 'asc' ? '▲' : '▼';
       btn.classList.add('active');
     } else {
@@ -288,49 +354,39 @@ function updateSortIndicators(){
   });
 }
 
-// lọc theo thiết bị và trạng thái
 async function filterByDevice() {
-  // Chuyển toàn bộ filter sang gọi API (thiết bị, trạng thái, thời gian, sort)
   await loadActivityData(currentSortField, currentSortOrder);
 }
 
-// tìm kiếm tổng quát
 async function searchData() {
   await filterByDevice();
 }
 
-// reset về dữ liệu ban đầu
 async function resetData() {
-  // Reset tất cả filters về mặc định
   document.getElementById("deviceSelect").value = "all";
   document.getElementById("statusSelect").value = "all";
   document.getElementById("searchTime").value = "";
   currentSortField = 'id';
   currentSortOrder = 'desc';
-  
-  // Load dữ liệu từ API không có sort
   await loadActivityData();
 }
 
-// Copy time function (call API before copying, similar to Sensor)
+// =================================================================
+// COPY TIME
+// =================================================================
+
 async function copyTime(timeString, recordId) {
   try {
     const response = await fetch(`${API_BASE}/telemetry/copy-time`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-token': localStorage.getItem('apiToken') || 'demo-token'
+        'x-api-token': localStorage.getItem('apiToken') || ''
       },
-      body: JSON.stringify({
-        timeString: timeString,
-        recordId: recordId
-      })
+      body: JSON.stringify({ timeString, recordId })
     });
-
     const result = await response.json();
-
     if (result.success) {
-      // Copy vào clipboard
       await navigator.clipboard.writeText(timeString);
       showCopyNotification(result.message);
     } else {
@@ -338,11 +394,10 @@ async function copyTime(timeString, recordId) {
     }
   } catch (err) {
     console.error('Copy time error:', err);
-    // Fallback: copy trực tiếp nếu API hoặc clipboard API lỗi
     try {
       await navigator.clipboard.writeText(timeString);
       showCopyNotification(`Đã copy: ${timeString}`);
-    } catch (clipboardErr) {
+    } catch {
       const textArea = document.createElement('textarea');
       textArea.value = timeString;
       document.body.appendChild(textArea);
@@ -354,51 +409,42 @@ async function copyTime(timeString, recordId) {
   }
 }
 
-// Show copy notification
 function showCopyNotification(message) {
-  // Remove existing notification
   const existing = document.querySelector('.copy-notification');
   if (existing) existing.remove();
-  
+
   const notification = document.createElement('div');
   notification.className = 'copy-notification';
   notification.textContent = message;
   document.body.appendChild(notification);
-  
-  // Auto remove after 2 seconds
+
   setTimeout(() => {
     notification.style.animation = 'slideOut 0.3s ease-out';
     setTimeout(() => notification.remove(), 300);
   }, 2000);
 }
 
+// =================================================================
+// KHỞI TẠO
+// =================================================================
+
 document.addEventListener('DOMContentLoaded', () => {
   const ok = ensureApiToken();
   if (!ok) return;
-  loadActivityData(); // Load data from API instead of dummy data
+  loadActivityData();
   updateSortIndicators();
 
-  // lọc theo thiết bị
-  document.getElementById("deviceSelect").addEventListener("change", filterByDevice);
+  const deviceSelect = document.getElementById("deviceSelect");
+  const statusSelect = document.getElementById("statusSelect");
   
-  // lọc theo trạng thái
-  document.getElementById("statusSelect").addEventListener("change", filterByDevice);
-  
-  // bỏ sortType dropdown; dùng nút toggle trên header
-
-  // tìm kiếm
-  document.querySelector(".filters button").addEventListener("click", searchData);
-
-  // chọn số bản ghi/trang (10/20/50)
-  const pageSizeSelect = document.getElementById('pageSizeSelect');
-  if (pageSizeSelect) {
-    itemsPerPage = Number(pageSizeSelect.value) || 10;
-    pageSizeSelect.addEventListener('change', () => {
-      itemsPerPage = Number(pageSizeSelect.value) || 10;
-      currentPage = 1;
-      renderTable();
-    });
+  if (deviceSelect) {
+    deviceSelect.addEventListener("change", filterByDevice);
   }
+  if (statusSelect) {
+    statusSelect.addEventListener("change", filterByDevice);
+  }
+  // Không cần thêm event listener cho button "Tìm Kiếm" vì đã có onclick trong HTML
+
+  // pageSizeSelect được tạo động trong updatePaginationControls()
+  // Event listener được thêm trong updatePaginationControls() rồi
 });
-
-

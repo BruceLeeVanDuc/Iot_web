@@ -21,6 +21,9 @@ async function getPool() {
             // Thêm các cấu hình để tránh ngắt kết nối
             charset: 'utf8mb4',
             timezone: '+00:00',
+            // Cấu hình encoding để hỗ trợ tiếng Việt
+            supportBigNumbers: true,
+            bigNumberStrings: true,
             // Cấu hình để giữ kết nối sống
             keepAliveInitialDelay: 0,
             enableKeepAlive: true

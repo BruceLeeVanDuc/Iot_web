@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { requireApiToken } = require('../middleware/auth');
-const { publishDeviceCommand } = require('../utils/mqtt');
+const { publishDeviceCommand, publishRainThreshold } = require('../utils/mqtt');
 
 // Table names from env with sensible defaults
 const COMMANDS_TABLE = process.env.TABLE_COMMANDS || 'device_commands';
@@ -11,7 +11,7 @@ const COMMANDS_TABLE = process.env.TABLE_COMMANDS || 'device_commands';
 let lastControlErrorTime = 0;
 const CONTROL_ERROR_COOLDOWN = 30000; // 30 seconds
 
-// POST /api/control -> create a command for a device
+// POST /api/control -> publish a command to a device (no DB write)
 router.post('/control', requireApiToken, async (req, res) => {
     try {
         const { device, status } = req.body || {};
@@ -20,7 +20,7 @@ router.post('/control', requireApiToken, async (req, res) => {
             return res.status(400).json({ error: 'device and status are required' });
         }
         
-        // Publish to MQTT first - only save to DB if MQTT succeeds
+        // Publish to MQTT only; DB will be updated when ESP32 responds
         const mqttResult = publishDeviceCommand(device, status);
         
         if (!mqttResult.success) {
@@ -31,16 +31,10 @@ router.post('/control', requireApiToken, async (req, res) => {
             });
         }
         
-        // Only save to database if MQTT publish succeeded
-        const sql = `INSERT INTO ${COMMANDS_TABLE} (device, status, created_at) VALUES (?, ?, ?)`;
-        const params = [device, status, new Date()];
-        
-        const result = await db.query(sql, params);
-        
         return res.json({ 
-            success: true, 
-            id: result.insertId,
-            mqtt: mqttResult
+            success: true,
+            mqtt: mqttResult,
+            message: 'Lệnh đã được gửi, chờ ESP32 phản hồi để lưu DB'
         });
         
     } catch (err) {
@@ -49,6 +43,25 @@ router.post('/control', requireApiToken, async (req, res) => {
             console.error('Create command error', err.message);
             lastControlErrorTime = now;
         }
+        return res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+// POST /api/config/rain-threshold -> set rain threshold via MQTT retained config
+router.post('/config/rain-threshold', requireApiToken, async (req, res) => {
+    try {
+        const { threshold } = req.body || {};
+        const num = Number(threshold);
+        if (!Number.isFinite(num) || num < 0) {
+            return res.status(400).json({ error: 'threshold must be a non-negative number' });
+        }
+        const result = publishRainThreshold(num);
+        if (!result.success) {
+            return res.status(503).json({ error: 'MQTT not available', details: result.error });
+        }
+        return res.json({ success: true, threshold: num });
+    } catch (err) {
+        console.error('Set rain threshold error', err.message);
         return res.status(500).json({ error: 'Internal Server Error' });
     }
 });
@@ -170,16 +183,39 @@ router.get('/control/status/:device', requireApiToken, async (req, res) => {
     try {
         const { device } = req.params;
         
+        // Map device names to friendly names (same as MQTT mapping)
+        const deviceMap = {
+            'den': 'Đèn',
+            'quat': 'Quạt', 
+            'dieuhoa': 'Điều hòa',
+            'light': 'Đèn',
+            'fan': 'Quạt',
+            'ac': 'Điều hòa',
+            'led1': 'Đèn',
+            'led2': 'Quạt',
+            'led3': 'Điều hòa',
+            'Đèn': 'Đèn',
+            'Quạt': 'Quạt',
+            'Điều hòa': 'Điều hòa'
+        };
+        
+        const deviceName = deviceMap[device] || device;
+        
         const sql = `SELECT id, device, status, created_at AS createdAt 
                      FROM ${COMMANDS_TABLE} 
                      WHERE device = ? 
                      ORDER BY created_at DESC 
                      LIMIT 1`;
         
-        const rows = await db.query(sql, [device]);
+        const rows = await db.query(sql, [deviceName]);
         
         if (rows.length === 0) {
-            return res.status(404).json({ error: 'No commands found for device' });
+            return res.status(404).json({ 
+                error: 'No commands found for device',
+                searchedDevice: device,
+                mappedDevice: deviceName,
+                message: `Không tìm thấy lệnh cho thiết bị: ${device}`
+            });
         }
         
         return res.json(rows[0]);
@@ -278,6 +314,91 @@ router.put('/control/:id', requireApiToken, async (req, res) => {
     }
 });
 
+// POST /api/control/sequence -> execute a light sequence (no DB write, publish only)
+router.post('/control/sequence', requireApiToken, async (req, res) => {
+    try {
+        const { steps, delay = 1000 } = req.body || {};
+        
+        if (!steps || !Array.isArray(steps) || steps.length === 0) {
+            return res.status(400).json({ 
+                error: 'steps array is required and must not be empty',
+                message: 'Vui lòng cung cấp danh sách các bước trong sequence'
+            });
+        }
+        
+        const results = [];
+        const deviceMap = {
+            'Đèn': 'control/led1',
+            'Quạt': 'control/led2', 
+            'Điều hòa': 'control/led3',
+            'den': 'control/led1',
+            'quat': 'control/led2',
+            'dieuhoa': 'control/led3',
+            'light': 'control/led1',
+            'fan': 'control/led2',
+            'ac': 'control/led3',
+            'led1': 'control/led1',
+            'led2': 'control/led2',
+            'led3': 'control/led3'
+        };
+        
+        // Execute each step in sequence
+        for (let i = 0; i < steps.length; i++) {
+            const step = steps[i];
+            const { device, status } = step;
+            
+            if (!device || !status) {
+                return res.status(400).json({ 
+                    error: `Step ${i + 1} missing device or status`,
+                    message: `Bước ${i + 1} thiếu thông tin thiết bị hoặc trạng thái`
+                });
+            }
+            
+            // Publish to MQTT
+            const mqttResult = publishDeviceCommand(device, status);
+            
+            if (!mqttResult.success) {
+                return res.status(503).json({ 
+                    error: 'MQTT not available during sequence',
+                    details: mqttResult.error,
+                    message: 'Không thể thực hiện sequence vì MQTT không hoạt động'
+                });
+            }
+            
+            results.push({
+                step: i + 1,
+                device,
+                status,
+                success: true,
+                mqtt: mqttResult
+            });
+            
+            // Wait before next step (except for last step)
+            if (i < steps.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+        
+        return res.json({ 
+            success: true, 
+            sequence: results,
+            totalSteps: steps.length,
+            message: 'Sequence đã được thực hiện thành công'
+        });
+        
+    } catch (err) {
+        const now = Date.now();
+        if (now - lastControlErrorTime > CONTROL_ERROR_COOLDOWN) {
+            console.error('Sequence execution error', err.message);
+            lastControlErrorTime = now;
+        }
+        return res.status(500).json({ 
+            error: 'Internal Server Error',
+            message: 'Lỗi server khi thực hiện sequence'
+        });
+    }
+});
+
 // DELETE /api/control/:id -> delete a command
 router.delete('/control/:id', requireApiToken, async (req, res) => {
     try {
@@ -302,4 +423,6 @@ router.delete('/control/:id', requireApiToken, async (req, res) => {
     }
 });
 
+
 module.exports = router;
+

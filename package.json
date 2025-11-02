@@ -20,10 +20,13 @@
     "@fortawesome/fontawesome-free": "^7.0.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
+    "echarts": "^5.6.0",
+    "echarts-liquidfill": "^3.1.0",
     "express": "^4.21.2",
     "mqtt": "^5.10.1",
     "mysql2": "^3.14.5",
-    "node-fetch": "^2.7.0"
+    "node-fetch": "^2.7.0",
+    "socket.io": "^4.8.1"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

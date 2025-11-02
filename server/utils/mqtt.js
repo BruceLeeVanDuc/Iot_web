@@ -1,177 +1,231 @@
 const mqtt = require('mqtt');
+
 const db = require('../db');
-const EventEmitter = require('events');
 
-// Simple event bus to broadcast new telemetry to SSE clients
-const telemetryBus = new EventEmitter();
 
-// MQTT client configuration
+
 const MQTT_URL = process.env.MQTT_URL || `mqtt://${process.env.MQTT_HOST || 'localhost'}:${process.env.MQTT_PORT || 1883}`;
+
 const MQTT_USER = process.env.MQTT_USER || '';
+
 const MQTT_PASSWORD = process.env.MQTT_PASSWORD || '';
+
+const COMMANDS_TABLE = process.env.TABLE_COMMANDS || 'device_commands';
+
+
 
 let mqttClient;
 
-// Initialize MQTT client
-function initializeMqttClient() {
-    try {
-        mqttClient = mqtt.connect(MQTT_URL, {
-            username: MQTT_USER || undefined,
-            password: MQTT_PASSWORD || undefined
-        });
-        
-        mqttClient.on('connect', () => {
-            console.log('[MQTT]  Connected to broker:', MQTT_URL);
-            
-            // Subscribe to sensor data topic
-            mqttClient.subscribe('dataSensor', (err) => {
-                if (err) {
-                    console.error('[MQTT] Subscribe error dataSensor:', err);
-                } else {
-                    console.log('[MQTT] Subscribed to topic: dataSensor');
-                }
-            });
-            
-            // Subscribe to control topics to receive retained messages
-            const controlTopics = ['control/led1', 'control/led2', 'control/led3'];
-            controlTopics.forEach(topic => {
-                mqttClient.subscribe(topic, (err) => {
-                    if (err) {
-                        console.error(`[MQTT] Subscribe error ${topic}:`, err);
-                    } else {
-                        console.log(`[MQTT] Subscribed to control topic: ${topic}`);
-                    }
-                });
-            });
-        });
-        
-        mqttClient.on('disconnect', () => {
-            console.log('[MQTT] Disconnected from broker');
-        });
-        
-        mqttClient.on('reconnect', () => {
-            console.log('[MQTT] Reconnecting to broker...');
-        });
-        
-        mqttClient.on('offline', () => {
-            console.log('[MQTT] Client is offline');
-        });
-        
-        mqttClient.on('error', (e) => console.error('[MQTT]  Error:', e.message));
-        
-        // Handle incoming messages from ESP32
-        mqttClient.on('message', async (topic, message) => {
-            console.log('[MQTT]  Received message from topic:', topic, 'payload:', message.toString());
-            
-            if (topic === 'dataSensor') {
-                try {
-                    await handleSensorData(message.toString());
-                    console.log('[MQTT] Sensor data processed successfully');
-                } catch (err) {
-                    console.error('[MQTT] Error processing sensor data:', err);
-                }
-            } else if (topic.startsWith('control/')) {
-                console.log('[MQTT] Received control message:', { topic, payload: message.toString() });
-                // This is a retained message showing current device state
-                // Could be used to sync UI state if needed
-            }
-        });
-        
-        return mqttClient;
-    } catch (e) {
-        console.error('[MQTT] init error', e.message);
-        return null;
-    }
-}
+let io;
 
-// Publish device command to MQTT
-function publishDeviceCommand(device, status) {
-    if (!mqttClient || !mqttClient.connected) {
-        console.warn('[MQTT] Client not connected, cannot publish command');
-        return { success: false, error: 'MQTT client not connected' };
-    }
-    
-    // Map UI device labels -> ESP32 topics (firmware subscribes control/led1|led2|led3)
-    const deviceMap = {
-        'Đèn': 'control/led1',
-        'Quạt': 'control/led2',
-        'Điều hòa': 'control/led3',
-        'den': 'control/led1',
-        'quat': 'control/led2',
-        'dieuhoa': 'control/led3',
-        'light': 'control/led1',
-        'fan': 'control/led2',
-        'ac': 'control/led3',
-        'led1': 'control/led1',
-        'led2': 'control/led2',
-        'led3': 'control/led3'
-    };
-    
-    const key = String(device || '').trim();
-    const topic = deviceMap[key] || deviceMap[key.toLowerCase()] || 'control/light';
-    
-    // Normalize payload to match ESP firmware expectations (ON/OFF)
-    const raw = String(status || '').trim();
-    const upper = raw.toUpperCase();
-    const normalized = upper === 'ON' || upper === 'OFF' ? upper : (upper.includes('ON') ? 'ON' : upper.includes('OFF') ? 'OFF' : upper);
-    
-    try {
-        console.log('[MQTT]  Publishing command:', { topic, payload: normalized, retain: true });
-        mqttClient.publish(topic, normalized, { qos: 1, retain: true });
-        return { success: true, topic, payload: normalized };
-    } catch (e) {
-        console.error('[MQTT]  Publish error:', e.message);
-        return { success: false, error: e.message };
-    }
-}
 
-// Handle sensor data from ESP32
-async function handleSensorData(message) {
+
+function initializeMqttClient(socketIoInstance) {
+
+  io = socketIoInstance;
+
+  mqttClient = mqtt.connect(MQTT_URL, {
+
+    username: MQTT_USER || undefined,
+
+    password: MQTT_PASSWORD || undefined
+
+  });
+
+ 
+
+  mqttClient.on('connect', () => {
+
+    console.log('[MQTT]  Connected to broker:', MQTT_URL);
+
+   
+
+    mqttClient.subscribe('dataSensor');
+
+    mqttClient.subscribe('device/+/state');
+
+   
+
+    // Lắng nghe topic "hỏi trạng thái"
+
+    const getStateTopic = 'devices/+/get_state';
+
+    mqttClient.subscribe(getStateTopic, (err) => {
+
+        if (!err) console.log(`[MQTT] Subscribed to topic hỏi trạng thái: ${getStateTopic}`);
+
+    });
+
+    // Clear retained messages on control topics to avoid applying stale commands when device reconnects
     try {
-        // Parse JSON data from ESP32
-        const data = JSON.parse(message);
-        
-        // Extract sensor values
-        const { temp, humi, light, deviceId = 'esp32-001' } = data;
-        
-        if (temp === undefined || humi === undefined || light === undefined) {
-            return;
-        }
-        
-        // Insert into database
-        const TELEMETRY_TABLE = process.env.TABLE_TELEMETRY || 'telemetry';
-        const sql = `INSERT INTO ${TELEMETRY_TABLE} (device_id, temp, humi, light, created_at) VALUES (?, ?, ?, ?, ?)`;
-        const createdAt = new Date();
-        const params = [deviceId, temp, humi, light, createdAt];
-        
-        const result = await db.query(sql, params);
-        
-        // Emit telemetry event for SSE subscribers
-        try {
-            telemetryBus.emit('telemetry', {
-                id: result && result.insertId ? result.insertId : undefined,
-                deviceId,
-                temp,
-                humi,
-                light,
-                createdAt
-            });
-        } catch (emitErr) {
-            // Avoid breaking the flow if no listeners
-        }
-        
+      ['control/led1', 'control/led2', 'control/led3'].forEach((t) => {
+        mqttClient.publish(t, '', { qos: 1, retain: true });
+      });
+      console.log('[MQTT]  Cleared retained control topics');
     } catch (err) {
-        console.error('[MQTT] Error handling sensor data:', err);
+      console.error('[MQTT]  Error clearing retained control topics', err);
     }
+
+
+
+  });
+
+ 
+
+  mqttClient.on('error', (e) => console.error('[MQTT]  Error:', e.message));
+
+ 
+
+  mqttClient.on('message', async (topic, message) => {
+
+    const payload = message.toString();
+
+    console.log(`[MQTT]  Received message [${topic}]: ${payload}`);
+
+   
+
+    // Gửi cập nhật trạng thái tới trình duyệt qua WebSocket
+
+    if (topic.startsWith('device/') && topic.endsWith('/state')) {
+
+      const deviceId = topic.split('/')[1];
+
+      if (io) {
+
+        io.emit('ledStateChange', { device: deviceId, state: payload });
+
+        console.log(`[Socket.IO] Gửi sự kiện 'ledStateChange' cho ${deviceId}`);
+
+      }
+
+
+
+      // LƯU DB: cập nhật bảng lệnh bằng trạng thái thực tế từ ESP
+
+      try {
+
+        const state = String(payload).trim().toUpperCase();
+
+        // Chỉ lưu khi state hợp lệ
+        if (state !== 'ON' && state !== 'OFF') {
+          console.warn(`[MQTT] Bỏ qua trạng thái không hợp lệ từ ${topic}: '${payload}'`);
+          return;
+        }
+
+        // Map deviceId (led1|led2|led3) -> tên hiển thị nhất quán trong DB
+
+        const nameMap = { led1: 'Đèn', led2: 'Quạt', led3: 'Điều hòa' };
+        const mappedName = nameMap[deviceId] || deviceId;
+        const sql = `INSERT INTO ${COMMANDS_TABLE} (device, status, created_at) VALUES (?, ?, ?)`;
+        await db.query(sql, [mappedName, state, new Date()]);
+        console.log(`[DB] Đã lưu trạng thái ${mappedName} = ${state}`);
+      } catch (dbErr) {
+
+        console.error('[DB] Lỗi lưu trạng thái thiết bị:', dbErr.message || dbErr);
+      }
+    }
+    // Xử lý khi ESP hỏi trạng thái
+
+    else if (topic.includes('/get_state')) {
+
+        const deviceId = topic.split('/')[1];
+
+        console.log(`[MQTT] Thiết bị ${deviceId} đang hỏi trạng thái. Khôi phục led1-3 từ DB`);
+
+        try {
+            const nameByLed = { led1: 'Đèn', led2: 'Quạt', led3: 'Điều hòa' };
+            // Lấy trạng thái gần nhất cho từng thiết bị hiển thị trong DB
+            const targets = [
+              { led: 'led1', name: 'Đèn' },
+              { led: 'led2', name: 'Quạt' },
+              { led: 'led3', name: 'Điều hòa' },
+            ];
+
+            for (const t of targets) {
+              const sql = `SELECT status FROM ${COMMANDS_TABLE} WHERE device = ? ORDER BY created_at DESC LIMIT 1`;
+              const rows = await db.query(sql, [t.name]);
+              if (rows.length > 0) {
+                const desiredState = String(rows[0].status || '').toUpperCase();
+                const topic = `control/${t.led}`;
+                // Publish không retain để tránh áp dụng về sau nếu offline
+                mqttClient.publish(topic, desiredState, { qos: 1, retain: false });
+                console.log(`[MQTT]  Restore ${t.led} = ${desiredState}`);
+              } else {
+                console.log(`[DB] Chưa có trạng thái trước đó cho ${t.name}`);
+              }
+            }
+        } catch (dbError) {
+            console.error(`[DB] Lỗi khi khôi phục trạng thái cho ${deviceId}:`, dbError);
+        }
+
+    }
+
+  });
+
+ 
+
+  return mqttClient;
+
 }
 
-// Initialize client on module load
-initializeMqttClient();
+
+
+// Hàm publish lệnh KHÔNG DÙNG RETAIN
+
+function publishDeviceCommand(device, status) {
+
+  if (!mqttClient || !mqttClient.connected) {
+
+    return { success: false, error: 'MQTT client not connected' };
+
+  }
+
+ 
+
+  const deviceMap = {
+
+    'đèn': 'control/led1', 'quạt': 'control/led2', 'điều hòa': 'control/led3',
+
+    'led1': 'control/led1', 'led2': 'control/led2', 'led3': 'control/led3'
+
+  };
+
+ 
+
+  const topic = deviceMap[device.toLowerCase()] || `control/${device.toLowerCase()}`;
+
+  const payload = status.toUpperCase();
+
+ 
+
+  // Không dùng retain cho lệnh điều khiển từ web để tránh áp dụng sau khi ESP cắm lại
+
+  mqttClient.publish(topic, payload, { qos: 1, retain: false });
+
+  console.log('[MQTT]  Published command:', { topic, payload, retain: false });
+
+  return { success: true };
+
+}
+
+
 
 module.exports = {
-    initializeMqttClient,
-    publishDeviceCommand,
-    handleSensorData,
-    MQTT_URL,
-    telemetryBus
+
+  initializeMqttClient,
+
+  publishDeviceCommand,
+
+  // Publish rain threshold to a retained config topic so late subscribers get it
+  publishRainThreshold: (threshold) => {
+    if (!mqttClient || !mqttClient.connected) {
+      return { success: false, error: 'MQTT client not connected' };
+    }
+    const topic = 'config/rain_threshold';
+    const payload = String(threshold);
+    mqttClient.publish(topic, payload, { qos: 1, retain: true });
+    console.log('[MQTT]  Published rain threshold:', { topic, payload, retain: true });
+    return { success: true };
+  },
+
 };

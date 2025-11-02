@@ -29,6 +29,8 @@
                 <option value="temp">Nhiệt Độ</option>
                 <option value="humi">Độ Ẩm</option>
                 <option value="light">Ánh Sáng</option>
+                <option value="rain">Lượng Mưa</option>
+                <option value="time">Thời Gian</option>
               </select>
               <input type="text" id="searchTime" placeholder="Tìm kiếm theo loại đã chọn...">
             </div>
@@ -56,6 +58,10 @@
                   <th>
                     Ánh Sáng (Lux)
                     <button class="sort-toggle" data-field="light" onclick="toggleSort('light')" title="Sắp xếp">▲</button>
+                  </th>
+                  <th>
+                    Lượng Mưa (mm)
+                    <button class="sort-toggle" data-field="rain" onclick="toggleSort('rain')" title="Sắp xếp">▲</button>
                   </th>
                   <th>
                     Thời Gian

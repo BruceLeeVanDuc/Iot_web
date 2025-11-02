@@ -2,9 +2,57 @@
 const API_BASE = `${location.origin}/api`;
 const DEVICE_ID = 'esp32-001';
 const HISTORY_LIMIT = 50;
-const UPDATE_INTERVAL = 5000;
+const UPDATE_INTERVAL = 5000; // Vẫn dùng để cập nhật biểu đồ và cảm biến
 
-// Token helpers: read from URL ?token=..., persist to localStorage, then use dynamically
+// ===== WEBSOCKET LOGIC (PHẦN NÂNG CẤP) =====
+// Hàm này sẽ cập nhật giao diện của một nút bấm
+function updateSwitchUI(deviceKey, status) {
+  // Tìm đúng nút bấm dựa trên data-device
+  const pill = document.querySelector(`.control-pill[data-device='${deviceKey}']`);
+  if (!pill) return;
+
+  const switchEl = pill.querySelector('.toggle');
+  const label = switchEl?.querySelector('.toggle-label');
+  if (!switchEl || !label) return;
+
+  const isOn = status === 'ON';
+  
+  // Xóa trạng thái "đang chờ" nếu có
+  switchEl.classList.remove('arming');
+
+  // Cập nhật giao diện
+  switchEl.classList.toggle('on', isOn);
+  switchEl.classList.toggle('off', !isOn);
+  label.textContent = isOn ? 'ON' : 'OFF';
+  pill.classList.toggle('on', isOn);
+
+  // Lưu vào localStorage để tải lại trang không bị mất trạng thái
+  localStorage.setItem(`switch_${deviceKey}`, status);
+  console.log(`✅ UI Updated for ${deviceKey} to ${status} via WebSocket.`);
+}
+
+// Hàm cài đặt trình lắng nghe WebSocket
+function setupWebSocketListeners() {
+  const socket = io(); // Kết nối tới WebSocket server
+
+  socket.on('connect', () => {
+    console.log('[Socket.IO] Đã kết nối thành công tới server!');
+  });
+
+  // Lắng nghe sự kiện 'ledStateChange' mà server gửi về
+  socket.on('ledStateChange', (data) => {
+    // data có dạng { device: 'led1', state: 'ON' }
+    console.log('✅ Nhận trạng thái mới từ WebSocket:', data);
+    updateSwitchUI(data.device, data.state);
+  });
+
+  socket.on('disconnect', () => {
+    console.warn('[Socket.IO] Đã mất kết nối tới server.');
+  });
+}
+
+// ===== CÁC HÀM CŨ CỦA BẠN (GIỮ NGUYÊN) =====
+// ... (toàn bộ code xử lý token, API, liquid effect, Chart.js của bạn...)
 function getUrlToken() {
   try {
     const u = new URL(location.href);
@@ -26,7 +74,6 @@ function ensureApiToken() {
     t = window.prompt('Nhập API token để kết nối server:', '');
     if (t && t.trim()) {
       localStorage.setItem('apiToken', t.trim());
-      // Reload để mọi request dùng token mới
       location.replace(location.pathname + location.search);
       return false;
     }
@@ -34,7 +81,6 @@ function ensureApiToken() {
   return true;
 }
 
-// Helper function to get headers with token (dynamic)
 function getAuthHeaders() {
   const token = localStorage.getItem('apiToken') || '';
   return {
@@ -43,7 +89,6 @@ function getAuthHeaders() {
   };
 }
 
-// ===== API FUNCTIONS =====
 async function postControlCommand(device, status) {
   try {
     const res = await fetch(`${API_BASE}/control`, {
@@ -51,10 +96,21 @@ async function postControlCommand(device, status) {
       headers: getAuthHeaders(),
       body: JSON.stringify({ device, status })
     });
-    return await res.json();
+    
+    const result = await res.json();
+    
+    if (res.ok && result.success) {
+      return { success: true, data: result };
+    } else {
+      return { 
+        success: false, 
+        error: result.error || result.message || `HTTP ${res.status}`,
+        data: result 
+      };
+    }
   } catch (err) {
-    console.error(' Control command error:', err);
-    return null;
+    console.error('Control command error:', err);
+    return { success: false, error: err.message };
   }
 }
 
@@ -81,45 +137,85 @@ async function fetchTelemetry(endpoint = 'telemetry') {
     });
     return await res.json();
   } catch (err) {
-    console.error(` Fetch ${endpoint} error:`, err);
+    console.error(`Fetch ${endpoint} error:`, err);
     return null;
   }
 }
 
-// ===== CONTROL FUNCTIONS =====
+function updateLiquidLevel(elementId, percentage, color) {
+  const liquid = document.getElementById(elementId);
+  if (!liquid) return;
+  const clampedPercent = Math.max(0, Math.min(100, percentage));
+  liquid.style.height = clampedPercent + '%';
+  if (color) {
+    liquid.style.backgroundColor = color;
+  }
+}
+
+function getTempColor(temp) {
+  if (temp < 10) return '#0ea5e9';
+  if (temp < 20) return '#3b82f6';
+  if (temp < 30) return '#FFFF99';
+  if (temp < 40) return '#FFB266';
+  return '#ef4444';
+}
+
+function getLightColor(light) {
+  if (light < 500) return '#475569';
+  if (light < 1500) return '#eab308';
+  if (light < 3000) return '#f59e0b';
+  return '#facc15';
+}
+
+function getHumidColor(humid) {
+  if (humid < 30) return '#fbbf24';
+  if (humid < 60) return '#06b6d4';
+  if (humid < 80) return '#3399FF';
+  return '#0288D1';
+}
+
+function getRainColor(rainMm) {
+  if (rainMm < 50) return '#60a5fa';
+  if (rainMm < 100) return '#3b82f6';
+  if (rainMm < 300) return '#2563eb';
+  if (rainMm < 600) return '#1d4ed8';
+  return '#1e40af';
+}
+
+// ===== CONTROL FUNCTIONS (ĐÃ SỬA) =====
 function toggleSwitch(el) {
-  const label = el.querySelector('.toggle-label');
   const isOn = el.classList.contains('on');
   const newStatus = isOn ? 'OFF' : 'ON';
 
-  // Toggle UI state
-  el.classList.toggle('on', !isOn);
-  el.classList.toggle('off', isOn);
-  label.textContent = newStatus;
-
-  // Get device name by control pill index
   const pill = el.closest('.control-pill');
-  const pills = Array.from(document.querySelectorAll('.control-pill'));
-  const deviceMap = ['Điều hòa', 'Đèn', 'Quạt'];
-  const device = deviceMap[pills.indexOf(pill)] || 'Thiết bị';
+  const deviceKey = pill.dataset.device;
 
-  // Toggle animation class on the pill (for CSS driven effects)
-  pill.classList.toggle('on', !isOn);
+  if (!deviceKey) {
+    console.error('Lỗi: Nút bấm thiếu "data-device" attribute!');
+    return;
+  }
+  
+  const label = el.querySelector('.toggle-label');
+  label.textContent = '...';
+  el.classList.add('arming');
 
-  // Save to localStorage as backup
-  const deviceKey = device.toLowerCase();
-  localStorage.setItem(`switch_${deviceKey}`, newStatus);
-
-  // Send control command
-  postControlCommand(device, newStatus);
+  console.log(`📤 Gửi lệnh ${newStatus} cho ${deviceKey}...`);
+  postControlCommand(deviceKey, newStatus).then(result => {
+    if (!result.success) {
+      console.error(`❌ Gửi lệnh thất bại cho ${deviceKey}:`, result.error);
+      updateSwitchUI(deviceKey, isOn ? 'ON' : 'OFF');
+    } else {
+      console.log(`✅ Lệnh cho ${deviceKey} đã được server chấp nhận, đang chờ xác nhận từ thiết bị...`);
+    }
+  });
 }
 
-// ===== CHART SETUP =====
+// ... (class SensorChart giữ nguyên y hệt)
 class SensorChart {
   constructor(canvasId) {
     this.ctx = document.getElementById(canvasId)?.getContext('2d');
     if (!this.ctx) {
-      console.error(' Chart canvas not found:', canvasId);
+      console.error('Chart canvas not found:', canvasId);
       return;
     }
     this.initChart();
@@ -131,22 +227,11 @@ class SensorChart {
 
   createDataset(label, colorVar, bgVar, yAxisID = 'y') {
     return {
-      label,
-      data: [],
-      borderColor: this.getCSSVar(colorVar),
-      backgroundColor: this.getCSSVar(bgVar),
-      borderWidth: 3,
-      tension: 0.4,
-      fill: true,
-      pointBackgroundColor: this.getCSSVar(colorVar),
-      pointBorderColor: '#fff',
-      pointBorderWidth: 2,
-      pointRadius: 4,
-      pointHoverRadius: 6,
-      pointHoverBackgroundColor: this.getCSSVar(colorVar),
-      pointHoverBorderColor: '#fff',
-      pointHoverBorderWidth: 3,
-      yAxisID: yAxisID
+      label, data: [], borderColor: this.getCSSVar(colorVar),
+      backgroundColor: this.getCSSVar(bgVar), borderWidth: 3, tension: 0.4, fill: true,
+      pointBackgroundColor: this.getCSSVar(colorVar), pointBorderColor: '#fff', pointBorderWidth: 2,
+      pointRadius: 4, pointHoverRadius: 6, pointHoverBackgroundColor: this.getCSSVar(colorVar),
+      pointHoverBorderColor: '#fff', pointHoverBorderWidth: 3, yAxisID: yAxisID
     };
   }
 
@@ -162,29 +247,16 @@ class SensorChart {
         ]
       },
       options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { intersect: false, mode: 'index' },
+        responsive: true, maintainAspectRatio: false, interaction: { intersect: false, mode: 'index' },
         plugins: {
           legend: {
             position: 'bottom',
-            labels: {
-              usePointStyle: true,
-              pointStyle: 'circle',
-              padding: 20,
-              font: { size: 14, weight: '600' }
-            }
+            labels: { usePointStyle: true, pointStyle: 'circle', padding: 20, font: { size: 14, weight: '600' } }
           },
           tooltip: {
-            backgroundColor: this.getCSSVar('--chart-tooltip-bg'),
-            titleColor: '#fff',
-            bodyColor: '#fff',
-            borderColor: this.getCSSVar('--chart-tooltip-border'),
-            borderWidth: 1,
-            cornerRadius: 8,
-            displayColors: true,
-            titleFont: { size: 14, weight: 'bold' },
-            bodyFont: { size: 13 }
+            backgroundColor: this.getCSSVar('--chart-tooltip-bg'), titleColor: '#fff', bodyColor: '#fff',
+            borderColor: this.getCSSVar('--chart-tooltip-border'), borderWidth: 1, cornerRadius: 8,
+            displayColors: true, titleFont: { size: 14, weight: 'bold' }, bodyFont: { size: 13 }
           }
         },
         scales: {
@@ -193,34 +265,16 @@ class SensorChart {
             ticks: { color: this.getCSSVar('--chart-text-color'), font: { size: 12 } }
           },
           y: {
-            type: 'linear',
-            display: true,
-            position: 'left',
-            beginAtZero: true,
+            type: 'linear', display: true, position: 'left', beginAtZero: true,
             grid: { color: this.getCSSVar('--chart-grid-color'), drawBorder: false },
             ticks: { color: this.getCSSVar('--chart-text-color'), font: { size: 12 } },
-            title: {
-              display: true,
-              text: 'Ánh sáng (Lux)',
-              color: this.getCSSVar('--chart-light-color'),
-              font: { size: 14, weight: 'bold' }
-            }
+            title: { display: true, text: 'Ánh sáng (Lux)', color: this.getCSSVar('--chart-light-color'), font: { size: 14, weight: 'bold' } }
           },
           y1: {
-            type: 'linear',
-            display: true,
-            position: 'right',
-            beginAtZero: true,
-            grid: {
-              drawOnChartArea: false,
-            },
+            type: 'linear', display: true, position: 'right', beginAtZero: true,
+            grid: { drawOnChartArea: false },
             ticks: { color: this.getCSSVar('--chart-text-color'), font: { size: 12 } },
-            title: {
-              display: true,
-              text: 'Nhiệt độ (°C) & Độ ẩm (%)',
-              color: this.getCSSVar('--chart-temp-color'),
-              font: { size: 14, weight: 'bold' }
-            }
+            title: { display: true, text: 'Nhiệt độ (°C) & Độ ẩm (%)', color: this.getCSSVar('--chart-temp-color'), font: { size: 14, weight: 'bold' } }
           }
         },
         animation: { duration: 2000, easing: 'easeInOutQuart' },
@@ -246,7 +300,6 @@ class SensorChart {
     const temps = [], humis = [], lights = [], labels = [];
     
     rows.forEach(r => {
-      // Handle different API response formats
       const temp = r.temperature ?? r.temp ?? 0;
       const humi = r.humidity ?? r.humi ?? 0;
       const light = r.light ?? 0;
@@ -264,12 +317,13 @@ class SensorChart {
   formatTime(timestamp) {
     if (!timestamp) return '';
     const d = new Date(timestamp);
-    return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}:${d.getSeconds().toString().padStart(2,'0')}`;
+    // Hiển thị theo giờ Việt Nam (UTC+7)
+    const vietnamTime = new Date(d.getTime() + (7 * 60 * 60 * 1000));
+    return `${vietnamTime.getHours().toString().padStart(2,'0')}:${vietnamTime.getMinutes().toString().padStart(2,'0')}:${vietnamTime.getSeconds().toString().padStart(2,'0')}`;
   }
 }
 
-// ===== UI UPDATE FUNCTIONS =====
-// Lưu giá trị trước đó để so sánh đổi màu
+// ... (các hàm updateLiveCards, restore, apply... giữ nguyên)
 let previousValues = {
   temp: null
 };
@@ -292,11 +346,13 @@ async function updateLiveCards() {
   const temp = toNumberOrNull(data.temperature ?? data.temp);
   const humi = toNumberOrNull(data.humidity ?? data.humi);
   const light = toNumberOrNull(data.light);
+  const rain = toNumberOrNull(data.rain ?? data.rain_mm);
 
   const updates = [
     { id: 'tempValue', raw: temp, fmt: (n) => `${n.toFixed(1)}°`, fallback: '—' },
     { id: 'humiValue', raw: humi, fmt: (n) => `${n.toFixed(1)}%`, fallback: '—' },
-    { id: 'lightValue', raw: light, fmt: (n) => `${Math.round(n)} Lux`, fallback: '—' }
+    { id: 'lightValue', raw: light, fmt: (n) => `${Math.round(n)} Lux`, fallback: '—' },
+    { id: 'rainValue', raw: rain, fmt: (n) => `${n.toFixed(2)} mm`, fallback: '—' }
   ];
 
   updates.forEach(({ id, raw, fmt, fallback }) => {
@@ -305,15 +361,17 @@ async function updateLiveCards() {
     el.textContent = raw === null ? fallback : fmt(raw);
   });
 
-  // Đổi màu khi nhiệt độ thay đổi
-  const tempEl = document.getElementById('tempValue');
-  if (tempEl && temp !== null) {
+  if (temp !== null) {
+    const tempPercent = (temp / 50) * 60;
+    const tempColor = getTempColor(temp);
+    updateLiquidLevel('tempLiquid', tempPercent, tempColor);
+    
+    const tempEl = document.getElementById('tempValue');
     const prev = previousValues.temp;
     if (typeof prev === 'number' && prev !== temp) {
       const increased = temp > prev;
       tempEl.classList.remove('value-up', 'value-down');
       tempEl.classList.add(increased ? 'value-up' : 'value-down');
-      // Gỡ class sau một khoảng để hiệu ứng diễn ra ngắn gọn
       setTimeout(() => {
         tempEl.classList.remove('value-up', 'value-down');
       }, 900);
@@ -321,117 +379,82 @@ async function updateLiveCards() {
     previousValues.temp = temp;
   }
 
-  // remove loading once values shown
+  if (humi !== null) {
+    const humidPercent = humi * 0.7;
+    const humidColor = getHumidColor(humi);
+    updateLiquidLevel('humiLiquid', humidPercent, humidColor);
+  }
+
+  if (light !== null) {
+    const lightPercent = (light / 5000) * 65;
+    const lightColor = getLightColor(light);
+    updateLiquidLevel('lightLiquid', lightPercent, lightColor);
+  }
+
+  if (rain !== null) {
+    const rainPercent = Math.max(0, Math.min(100, (rain / 1000) * 100));
+    const rainColor = getRainColor(rain);
+    updateLiquidLevel('rainLiquid', rainPercent, rainColor);
+  }
+
   setTimeout(() => cards.forEach(c => c.classList.remove('loading')), 150);
 }
 
-async function updateSwitchStates() {
-  try {
-    const deviceStates = await fetchDeviceStates();
-    if (!deviceStates) return;
-
-    // Map device names to their corresponding switches
-    const deviceMap = {
-      'điều hòa': 0,  // First switch
-      'đèn': 1,       // Second switch  
-      'quạt': 2       // Third switch
-    };
-
-    // Get all control pills
-    const pills = Array.from(document.querySelectorAll('.control-pill'));
-    
-    Object.entries(deviceMap).forEach(([deviceName, index]) => {
-      if (pills[index]) {
-        const switchEl = pills[index].querySelector('.toggle');
-        const label = switchEl?.querySelector('.toggle-label');
-        
-        if (switchEl && label) {
-          const status = deviceStates[deviceName];
-          const isOn = status === 'ON';
-          
-          // Update UI state
-          switchEl.classList.toggle('on', isOn);
-          switchEl.classList.toggle('off', !isOn);
-          label.textContent = isOn ? 'ON' : 'OFF';
-          
-          // Update pill state
-          pills[index].classList.toggle('on', isOn);
-          
-          // Save to localStorage as backup
-          localStorage.setItem(`switch_${deviceName}`, isOn ? 'ON' : 'OFF');
-        }
-      }
-    });
-    
-  } catch (err) {
-    console.error('Error updating switch states:', err);
-    // Fallback to localStorage if server fails
-    restoreFromLocalStorage();
-  }
-}
-
 function restoreFromLocalStorage() {
-  const deviceMap = {
-    'điều hòa': 0,
-    'đèn': 1, 
-    'quạt': 2
-  };
-
-  const pills = Array.from(document.querySelectorAll('.control-pill'));
-  
-  Object.entries(deviceMap).forEach(([deviceName, index]) => {
-    if (pills[index]) {
-      const switchEl = pills[index].querySelector('.toggle');
-      const label = switchEl?.querySelector('.toggle-label');
-      
-      if (switchEl && label) {
-        const savedStatus = localStorage.getItem(`switch_${deviceName}`);
-        if (savedStatus) {
-          const isOn = savedStatus === 'ON';
-          
-          switchEl.classList.toggle('on', isOn);
-          switchEl.classList.toggle('off', !isOn);
-          label.textContent = isOn ? 'ON' : 'OFF';
-          pills[index].classList.toggle('on', isOn);
-        }
-      }
+  const deviceKeys = ['led1', 'led2', 'led3'];
+  deviceKeys.forEach(key => {
+    const status = localStorage.getItem(`switch_${key}`);
+    if (status) {
+      updateSwitchUI(key, status);
     }
   });
-  
 }
 
+async function applyDeviceStatesOnce() {
+  try {
+    const deviceStates = await fetchDeviceStates();
+    if (deviceStates) {
+      Object.entries(deviceStates).forEach(([deviceKey, status]) => {
+        updateSwitchUI(deviceKey, status.toLowerCase());
+      });
+    }
+  } catch (_) {}
+}
 
-// ===== INITIALIZATION =====
+// ===== INITIALIZATION (ĐÃ SỬA) =====
 let sensorChart;
 
 async function initApp() {
-  // Ensure we have a token (from URL or prompt once)
   const ok = ensureApiToken();
-  if (!ok) return; // page will reload if user entered token
-  // Initialize chart
+  if (!ok) return;
+  
+  setupWebSocketListeners();
+
   sensorChart = new SensorChart('homeChart');
   
-  // Load initial data
   await Promise.all([
     sensorChart?.loadHistory(),
-    updateLiveCards(),
-    updateSwitchStates()  // Restore switch states from server
+    updateLiveCards()
   ]);
 
-  // Setup periodic updates
+  restoreFromLocalStorage();
+  await applyDeviceStatesOnce();
+
+  // Vẫn giữ interval để cập nhật biểu đồ và các thẻ cảm biến
   setInterval(async () => {
     await Promise.all([
       sensorChart?.loadHistory(),
-      updateLiveCards(),
-      updateSwitchStates()  // Keep switch states in sync
+      updateLiveCards()
     ]);
   }, UPDATE_INTERVAL);
 
-  console.log('✅ Home app initialized');
+  console.log('✅ Home app initialized - REAL-TIME MODE');
 }
 
-// Auto-initialize
 document.addEventListener('DOMContentLoaded', initApp);
+window.addEventListener('pageshow', () => {
+  restoreFromLocalStorage();
+  applyDeviceStatesOnce();
+});
 
-// Global functions for HTML onclick handlers
 window.toggleSwitch = toggleSwitch;

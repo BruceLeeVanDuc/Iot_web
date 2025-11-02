@@ -30,8 +30,20 @@
   display:flex; flex-wrap:wrap;
   gap:10px;
   align-items:center;
-  justify-content:center;      /* đặt giữa như ảnh mẫu */
+  justify-content:center;
   margin-bottom:14px;
+}
+
+.search-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.search-section label {
+  font-weight: 600;
+  color: #2c3e50;
+  font-size: 14px;
 }
 
 .filters select,
@@ -42,7 +54,13 @@
   border-radius:10px;
   background:#fff;
   outline:none;
-  
+  font-size: 14px;
+}
+
+.filters select:focus,
+.filters input:focus{
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
 }
 
 /* Input Group Styles */
@@ -53,23 +71,62 @@
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-.input-group select {
-  border-radius: 10px 0 0 10px;
-  border-right: none;
-  min-width: 120px;
-}
-
 .input-group input {
-  border-radius: 0 10px 10px 0;
-  border-left: none;
+  border-radius: 10px;
   flex: 1;
   min-width: 200px;
 }
 
 .input-group select:focus,
 .input-group input:focus {
-  border-color: #999;
-  box-shadow: 0 0 0 2px rgba(0,0,0,0.1);
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+/* Sensor Search Group Styles */
+.sensor-search-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.sensor-search-group select,
+.sensor-search-group input {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid #dcdcdc;
+  border-radius: 10px;
+  background: #fff;
+  outline: none;
+  font-size: 14px;
+}
+
+.sensor-search-group select:nth-child(1) {
+  min-width: 140px;
+}
+
+.sensor-search-group select:nth-child(2) {
+  min-width: 60px;
+}
+
+.sensor-search-group input {
+  min-width: 120px;
+  flex: 1;
+}
+
+.sensor-search-group select:focus,
+.sensor-search-group input:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+/* Search Buttons */
+.search-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 10px;
 }
 
 .filters button{
@@ -127,6 +184,9 @@
   text-align:center;
   position: relative;
 }
+
+/* Rain alert blink */
+/* Bỏ hiệu ứng nhấp nháy cho ô mưa theo yêu cầu */
 
 /* Sort toggle styling */
 .sort-toggle{

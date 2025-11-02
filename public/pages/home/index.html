@@ -6,6 +6,7 @@
   <link rel="stylesheet" href="/assets/css/common.css">
   <link rel="stylesheet" href="/assets/css/home.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 <body>
   <div class="app">
@@ -18,22 +19,68 @@
       <div id="topbar"></div>
 
       <div class="dashboard">
-        <!-- Cards -->
+        <!-- Cards with Liquid Effect -->
         <div class="cards-row">
+          <!-- Temperature Card -->
           <div class="card card-temp">
-            <div class="card-emoji"><img src="/assets/icons/temperature.png" alt="Temperature" class="icon-24"></div>
-            <div class="card-title">Temperature</div>
-            <div class="card-value" id="tempValue">33.6°</div>
+            <div class="liquid-container" id="tempLiquid">
+              <div class="liquid-wave"></div>
+              <div class="liquid-wave"></div>
+              <div class="liquid-wave"></div>
+            </div>
+            <div class="card-content">
+              <div class="card-emoji">
+                <img src="/assets/icons/temperature.png" alt="Temperature" class="icon-24">
+              </div>
+              <div class="card-title">Temperature</div>
+              <div class="card-value" id="tempValue">--°</div>
+            </div>
           </div>
+
+          <!-- Light Card -->
           <div class="card card-light">
-            <div class="card-emoji"><img src="/assets/icons/light.png" alt="Light" class="icon-24"></div>
-            <div class="card-title">Light</div>
-            <div class="card-value" id="lightValue">543 Lux</div>
+            <div class="liquid-container" id="lightLiquid">
+              <div class="liquid-wave"></div>
+              <div class="liquid-wave"></div>
+              <div class="liquid-wave"></div>
+            </div>
+            <div class="card-content">
+              <div class="card-emoji">
+                <img src="/assets/icons/light.png" alt="Light" class="icon-24">
+              </div>
+              <div class="card-title">Light</div>
+              <div class="card-value" id="lightValue">-- Lux</div>
+            </div>
           </div>
+
+          <!-- Humidity Card -->
           <div class="card card-humi">
-            <div class="card-emoji"><img src="/assets/icons/humidity.png" alt="Humidity" class="icon-24"></div>
-            <div class="card-title">Humidity</div>
-            <div class="card-value" id="humiValue">36 %</div>
+            <div class="liquid-container" id="humiLiquid">
+              <div class="liquid-wave"></div>
+              <div class="liquid-wave"></div>
+              <div class="liquid-wave"></div>
+            </div>
+            <div class="card-content">
+              <div class="card-emoji">
+                <img src="/assets/icons/humidity.png" alt="Humidity" class="icon-24">
+              </div>
+              <div class="card-title">Humidity</div>
+              <div class="card-value" id="humiValue">--%</div>
+            </div>
+          </div>
+
+          <!-- Rain Card -->
+          <div class="card card-rain">
+            <div class="liquid-container" id="rainLiquid">
+              <div class="liquid-wave"></div>
+              <div class="liquid-wave"></div>
+              <div class="liquid-wave"></div>
+            </div>
+            <div class="card-content">
+              <div class="card-emoji">🌧️</div>
+              <div class="card-title">Rain</div>
+              <div class="card-value" id="rainValue">-- mm</div>
+            </div>
           </div>
         </div>
 
@@ -44,24 +91,36 @@
               <canvas id="homeChart"></canvas>
             </div>
             <div class="controls-col">
-              <div class="control-pill device-ac">
-                <div class="ctrl-left"><img src="/assets/icons/ac.png" alt="AC" class="icon-20"></div>
+              <div class="control-pill device-ac" data-device="led1">
+                <div class="ctrl-left">
+                  <img src="/assets/icons/ac.png" alt="AC" class="icon-20">
+                </div>
                 <div class="toggle off" onclick="toggleSwitch(this)">
-                  <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                  <div class="toggle-track">
+                    <div class="toggle-thumb"></div>
+                  </div>
                   <div class="toggle-label">OFF</div>
                 </div>
               </div>
-              <div class="control-pill device-light">
-                <div class="ctrl-left"><img src="/assets/icons/light.png" alt="Light" class="icon-20"></div>
+              <div class="control-pill device-light" data-device="led2">
+                <div class="ctrl-left">
+                  <img src="/assets/icons/light.png" alt="Light" class="icon-20">
+                </div>
                 <div class="toggle off" onclick="toggleSwitch(this)">
-                  <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                  <div class="toggle-track">
+                    <div class="toggle-thumb"></div>
+                  </div>
                   <div class="toggle-label">OFF</div>
                 </div>
               </div>
-              <div class="control-pill device-fan">
-                <div class="ctrl-left"><img src="/assets/icons/fan.png" alt="Fan" class="icon-20"></div>
+              <div class="control-pill device-fan" data-device="led3">
+                <div class="ctrl-left">
+                  <img src="/assets/icons/fan.png" alt="Fan" class="icon-20">
+                </div>
                 <div class="toggle off" onclick="toggleSwitch(this)">
-                  <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                  <div class="toggle-track">
+                    <div class="toggle-thumb"></div>
+                  </div>
                   <div class="toggle-label">OFF</div>
                 </div>
               </div>
@@ -76,4 +135,3 @@
   <script src="/assets/js/home.js"></script>
 </body>
 </html>
-

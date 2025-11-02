@@ -5,6 +5,10 @@
   <title>IoT ESP Control - Data Activity</title>
   <link rel="stylesheet" href="/assets/css/common.css">
   <link rel="stylesheet" href="/assets/css/activity.css">
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/customParseFormat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/utc.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/timezone.js"></script>
 </head>
 <body>
   <div class="app">
@@ -34,7 +38,7 @@
               <option value="ON">ON</option>
               <option value="OFF">OFF</option>
             </select>
-            <input type="text" id="searchTime" placeholder="yyyy/dd/mm 12:30:26">
+            <input type="text" id="searchTime" placeholder="DD/MM/YYYY hoặc HH:MM:SS hoặc 25/09/2025">
             <button onclick="searchData()">Tìm Kiếm</button>
             <button onclick="resetData()" style="background: #4d3ce7;">Quay lại</button>
           </div>

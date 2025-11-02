@@ -2,7 +2,10 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { requireApiToken } = require('../middleware/auth');
-const { telemetryBus } = require('../utils/mqtt');
+const { EventEmitter } = require('events');
+
+// Simple in-process event bus for telemetry realtime
+const telemetryBus = new EventEmitter();
 
 // Table names from env with sensible defaults
 const TELEMETRY_TABLE = process.env.TABLE_TELEMETRY || 'telemetry';
@@ -18,11 +21,24 @@ function formatTelemetryRow(row) {
     const t = Number(out.temperature);
     const h = Number(out.humidity);
     const l = Number(out.light);
+    const r = Number(out.rain);
     out.temperature = Number.isFinite(t) ? Number(t.toFixed(1)) : null;
     out.humidity = Number.isFinite(h) ? Number(h.toFixed(1)) : null;
     out.light = Number.isFinite(l) ? Math.round(l) : null;
+    out.rain = Number.isFinite(r) ? Number(r.toFixed(2)) : null;
     return out;
 }
+
+// Ensure rain column exists (MySQL 8+ supports IF NOT EXISTS)
+async function ensureRainColumn() {
+    try {
+        const sql = `ALTER TABLE ${TELEMETRY_TABLE} ADD COLUMN IF NOT EXISTS rain_mm FLOAT DEFAULT 0`;
+        await db.query(sql);
+    } catch (e) {
+        // ignore if lacks privilege or older MySQL – later insert will fallback
+    }
+}
+ensureRainColumn().catch(() => {});
 
 // POST /api/telemetry -> ingest telemetry from ESP32
 router.post('/telemetry', requireApiToken, async (req, res) => {
@@ -33,14 +49,67 @@ router.post('/telemetry', requireApiToken, async (req, res) => {
             return res.status(400).json({ error: 'deviceId is required' });
         }
         
-        const { temp, humi, light } = data || {};
+        const { temp, humi, light, rain_mm } = data || {};
+        // Lưu timestamp theo UTC. Không cộng thêm múi giờ; FE sẽ hiển thị theo Asia/Ho_Chi_Minh
         const createdAt = timestamp ? new Date(timestamp) : new Date();
+        const tryInsert = async () => {
+            const sql = `INSERT INTO ${TELEMETRY_TABLE} (device_id, temp, humi, light, rain_mm, created_at) VALUES (?, ?, ?, ?, ?, ?)`;
+            const params = [deviceId, temp || 0, humi || 0, light || 0, rain_mm || 0, createdAt];
+            return db.query(sql, params);
+        };
         
-        const sql = `INSERT INTO ${TELEMETRY_TABLE} (device_id, temp, humi, light, created_at) VALUES (?, ?, ?, ?, ?)`;
-        const params = [deviceId, temp || 0, humi || 0, light || 0, createdAt];
+        // Debug log: inbound payload and client IP
+        try {
+            const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+            console.log(`[Telemetry] POST from ${ip} deviceId=${deviceId} data=`, data);
+        } catch (_) {}
+
+        let result;
+        try {
+            result = await tryInsert();
+        } catch (e) {
+            // If missing column, try to add then retry once
+            const msg = String(e && e.message || '');
+            if (msg.includes('Unknown column') || msg.includes('ER_BAD_FIELD_ERROR')) {
+                await ensureRainColumn();
+                result = await tryInsert();
+            } else {
+                throw e;
+            }
+        }
         
-        const result = await db.query(sql, params);
-        return res.json({ success: true, id: result.insertId });
+        // Emit realtime event for SSE subscribers
+        try {
+            telemetryBus.emit('new', {
+                id: result.insertId,
+                deviceId,
+                temp: temp || 0,
+                humi: humi || 0,
+                light: light || 0,
+                rain: rain_mm || 0,
+                createdAt: createdAt.toISOString()
+            });
+        } catch (_) {}
+
+        // Debug log: inserted row id
+        try { console.log('[Telemetry] Inserted row id =', result.insertId); } catch (_) {}
+
+        // Return success with input data for verification
+        return res.json({ 
+            success: true, 
+            id: result.insertId,
+            input: {
+                deviceId,
+                data: {
+                    temperature: temp,
+                    humidity: humi,
+                    light: light,
+                    rain: rain_mm
+                },
+                timestamp: createdAt.toISOString()
+            },
+            message: 'Dữ liệu đã được lưu thành công'
+        });
         
     } catch (err) {
         console.error('Telemetry ingest error', err);
@@ -49,11 +118,11 @@ router.post('/telemetry', requireApiToken, async (req, res) => {
 });
 
 // GET /api/telemetry -> list telemetry with filters
-router.get('/telemetry', requireApiToken, async (req, res) => {
+router.get('/telemetry', async (req, res) => {
     try {
         const { deviceId, limit = 100, since, until, sortField, sortOrder } = req.query;
         
-        // Build WHERE clause dynamically
+        // Build WHERE clause dynamically với kiểm tra tham số thời gian hợp lệ
         const clauses = [];
         const params = [];
         
@@ -62,14 +131,20 @@ router.get('/telemetry', requireApiToken, async (req, res) => {
             params.push(deviceId); 
         }
         
-        if (since) { 
-            clauses.push('created_at >= ?'); 
-            params.push(new Date(since)); 
+        if (since) {
+            const d = new Date(since);
+            if (!isNaN(d.getTime())) { 
+                clauses.push('created_at >= ?'); 
+                params.push(d); 
+            }
         }
         
         if (until) { 
-            clauses.push('created_at <= ?'); 
-            params.push(new Date(until)); 
+            const d = new Date(until);
+            if (!isNaN(d.getTime())) {
+                clauses.push('created_at <= ?'); 
+                params.push(d); 
+            }
         }
         
         const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
@@ -78,19 +153,20 @@ router.get('/telemetry', requireApiToken, async (req, res) => {
         // Build ORDER BY clause
         let orderBy = 'ORDER BY id DESC'; // default
         if (sortField && sortOrder) {
-            const validFields = ['id', 'temp', 'humi', 'light', 'time', 'created_at'];
+            const validFields = ['id', 'temp', 'humi', 'light', 'rain_mm', 'rain', 'time', 'created_at'];
             const validOrders = ['asc', 'desc'];
             
             if (validFields.includes(sortField) && validOrders.includes(sortOrder.toLowerCase())) {
                 const field = sortField === 'time' || sortField === 'created_at' ? 'created_at' : 
                              sortField === 'temp' ? 'temp' :
                              sortField === 'humi' ? 'humi' :
-                             sortField === 'light' ? 'light' : 'id';
+                             sortField === 'light' ? 'light' :
+                             (sortField === 'rain' || sortField === 'rain_mm') ? 'rain_mm' : 'id';
                 orderBy = `ORDER BY ${field} ${sortOrder.toUpperCase()}`;
             }
         }
         
-        const sql = `SELECT id, device_id AS deviceId, temp AS temperature, humi AS humidity, light, created_at AS createdAt 
+        const sql = `SELECT id, device_id AS deviceId, temp AS temperature, humi AS humidity, light, rain_mm AS rain, created_at AS createdAt 
                      FROM ${TELEMETRY_TABLE} ${where} 
                      ${orderBy} LIMIT ${lim}`;
         
@@ -117,7 +193,7 @@ router.get('/telemetry/latest', requireApiToken, async (req, res) => {
             return res.status(400).json({ error: 'deviceId is required' });
         }
         
-        const sql = `SELECT id, device_id AS deviceId, temp AS temperature, humi AS humidity, light, created_at AS createdAt 
+        const sql = `SELECT id, device_id AS deviceId, temp AS temperature, humi AS humidity, light, rain_mm AS rain, created_at AS createdAt 
                      FROM ${TELEMETRY_TABLE} 
                      WHERE device_id = ? 
                      ORDER BY created_at DESC 
@@ -158,6 +234,9 @@ router.get('/telemetry/stats', requireApiToken, async (req, res) => {
                      AVG(light) as avgLight,
                      MAX(light) as maxLight,
                      MIN(light) as minLight,
+                     AVG(rain_mm) as avgRain,
+                     MAX(rain_mm) as maxRain,
+                     MIN(rain_mm) as minRain,
                      COUNT(*) as recordCount
                    FROM ${TELEMETRY_TABLE} 
                    WHERE created_at >= ?`;
@@ -187,15 +266,15 @@ router.get('/telemetry/stats', requireApiToken, async (req, res) => {
     }
 });
 
-// GET /api/telemetry/search -> search exact match by a specific column (temp/humi/light)
+// GET /api/telemetry/search -> search exact (no tolerance) by a specific column (temp/humi/light)
 router.get('/telemetry/search', requireApiToken, async (req, res) => {
     try {
-        const { deviceId, field = 'temp', value, limit = 100, tolerance } = req.query;
+        const { deviceId, field = 'temp', value, limit = 100 } = req.query;
 
-        const columnMap = { temp: 'temp', humi: 'humi', light: 'light' };
+        const columnMap = { temp: 'temp', humi: 'humi', light: 'light', rain: 'rain_mm' };
         const col = columnMap[String(field).toLowerCase()];
         if (!col) {
-            return res.status(400).json({ error: 'Invalid field. Use temp | humi | light' });
+            return res.status(400).json({ error: 'Invalid field. Use temp | humi | light | rain' });
         }
 
         if (value === undefined) {
@@ -208,15 +287,21 @@ router.get('/telemetry/search', requireApiToken, async (req, res) => {
             return res.status(400).json({ error: 'value must be a number' });
         }
 
-        // Default tolerance: 0.05 for temp/humi (one decimal), 1 for light (integer)
-        const defaultTol = col === 'light' ? 1 : 0.05;
-        const tol = Math.abs(Number(tolerance)) || defaultTol;
-
-        const minVal = numericValue - tol;
-        const maxVal = numericValue + tol;
-
-        const clauses = [`${col} BETWEEN ? AND ?`];
-        const params = [minVal, maxVal];
+        // Với temp/humi (kiểu FLOAT), so sánh theo làm tròn 1 chữ số để khớp dữ liệu hiển thị
+        const isLight = col === 'light';
+        const isRain = col === 'rain_mm';
+        const rounded1 = Number(numericValue.toFixed(1));
+        const rounded2 = Number(numericValue.toFixed(2));
+        const clauses = isLight
+            ? [`${col} = ?`]
+            : isRain
+                ? [`(ROUND(${col}, 2) = ? OR ${col} = ?)`]
+                : [`(ROUND(${col}, 1) = ? OR ${col} = ?)`];
+        const params = isLight
+            ? [numericValue]
+            : isRain
+                ? [rounded2, rounded2]
+                : [rounded1, Math.trunc(numericValue)];
 
         if (deviceId) {
             clauses.push('device_id = ?');
@@ -226,7 +311,7 @@ router.get('/telemetry/search', requireApiToken, async (req, res) => {
         const where = `WHERE ${clauses.join(' AND ')}`;
         const lim = Math.min(Number(limit) || 100, 1000);
 
-        const sql = `SELECT id, device_id AS deviceId, temp AS temperature, humi AS humidity, light, created_at AS createdAt
+        const sql = `SELECT id, device_id AS deviceId, temp AS temperature, humi AS humidity, light, rain_mm AS rain, created_at AS createdAt
                      FROM ${TELEMETRY_TABLE}
                      ${where}
                      ORDER BY id DESC
@@ -237,6 +322,53 @@ router.get('/telemetry/search', requireApiToken, async (req, res) => {
         return res.json(formatted);
     } catch (err) {
         console.error('Telemetry search error', err.message);
+        return res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+// GET /api/telemetry/search-any -> exact (no tolerance) across temp/humi/light
+router.get('/telemetry/search-any', requireApiToken, async (req, res) => {
+    try {
+        const { deviceId, value, limit = 100 } = req.query;
+
+        if (value === undefined) {
+            return res.status(400).json({ error: 'value is required' });
+        }
+
+        const numericValue = Number(value);
+        if (!Number.isFinite(numericValue)) {
+            return res.status(400).json({ error: 'value must be a number' });
+        }
+
+        const rounded = Number(numericValue.toFixed(1));
+        const integer = Math.trunc(numericValue);
+        const clauses = [
+            '(ROUND(temp, 1) = ? OR temp = ?)',
+            '(ROUND(humi, 1) = ? OR humi = ?)',
+            '(light = ?)',
+            '(ROUND(rain_mm, 2) = ? OR rain_mm = ?)'
+        ];
+
+        const params = [rounded, integer, rounded, integer, numericValue, Number(numericValue.toFixed(2)), Number(numericValue.toFixed(2))];
+
+        let where = `WHERE (${clauses.join(' OR ')})`;
+        if (deviceId) {
+            where += ' AND device_id = ?';
+            params.push(deviceId);
+        }
+
+        const lim = Math.min(Number(limit) || 100, 1000);
+        const sql = `SELECT id, device_id AS deviceId, temp AS temperature, humi AS humidity, light, rain_mm AS rain, created_at AS createdAt
+                     FROM ${TELEMETRY_TABLE}
+                     ${where}
+                     ORDER BY id DESC
+                     LIMIT ${lim}`;
+
+        const rows = await db.query(sql, params);
+        const formatted = Array.isArray(rows) ? rows.map(r => formatTelemetryRow(r)) : rows;
+        return res.json(formatted);
+    } catch (err) {
+        console.error('Telemetry search-any error', err.message);
         return res.status(500).json({ error: 'Internal Server Error' });
     }
 });
@@ -267,38 +399,84 @@ router.post('/telemetry/copy-time', requireApiToken, async (req, res) => {
     }
 });
 
-module.exports = router;
- 
-// SSE stream for realtime telemetry
-router.get('/telemetry/stream', requireApiToken, (req, res) => {
-    // Set SSE headers
+// GET /api/telemetry/stream -> Server-Sent Events for real-time telemetry
+router.get('/telemetry/stream', requireApiToken, async (req, res) => {
+    // Setup SSE headers
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
-    if (res.flushHeaders) res.flushHeaders();
+    res.flushHeaders && res.flushHeaders();
 
-    const send = (payload) => {
+    // Heartbeat to keep connection alive
+    const heartbeat = setInterval(() => {
+        try { res.write(`: ping\n\n`); } catch (_) {}
+    }, 25000);
+
+    // Listener for new telemetry events
+    const onNewTelemetry = (payload) => {
         try {
             res.write(`data: ${JSON.stringify(payload)}\n\n`);
-        } catch (_) {
-            // ignore write errors; close will cleanup
-        }
+        } catch (_) {}
     };
+    telemetryBus.on('new', onNewTelemetry);
 
-    // Optional heartbeat to keep connection alive
-    const heartbeatId = setInterval(() => {
-        try { res.write(`: ping\n\n`); } catch (_) {}
-    }, 15000);
-
-    const onTelemetry = (payload) => {
-        send(payload);
-    };
-
-    telemetryBus.on('telemetry', onTelemetry);
-
+    // Cleanup on client disconnect
     req.on('close', () => {
-        clearInterval(heartbeatId);
-        telemetryBus.off('telemetry', onTelemetry);
+        clearInterval(heartbeat);
+        telemetryBus.off('new', onNewTelemetry);
         try { res.end(); } catch (_) {}
     });
 });
+
+// GET /api/telemetry/rain/aggregate -> aggregate rainfall by hour/day
+router.get('/telemetry/rain/aggregate', requireApiToken, async (req, res) => {
+    try {
+        const { deviceId, from, to, interval = 'hour' } = req.query;
+
+        const clauses = [];
+        const params = [];
+        if (deviceId) { clauses.push('device_id = ?'); params.push(deviceId); }
+        if (from) { const d = new Date(from); if (!isNaN(d)) { clauses.push('created_at >= ?'); params.push(d); } }
+        if (to) { const d = new Date(to); if (!isNaN(d)) { clauses.push('created_at <= ?'); params.push(d); } }
+        const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+
+        const intv = String(interval).toLowerCase();
+        let sql;
+        if (intv === 'day') {
+            const by = '%Y-%m-%d';
+            sql = `SELECT 
+                        DATE_FORMAT(created_at, '${by}') AS bucket,
+                        SUM(rain_mm) AS totalRain
+                   FROM ${TELEMETRY_TABLE}
+                   ${where}
+                   GROUP BY bucket
+                   ORDER BY bucket ASC`;
+        } else if (intv === '5min' || intv === '5m') {
+            // Bucket theo 5 phút dùng UNIX_TIMESTAMP để làm tròn xuống bội số của 300 giây
+            sql = `SELECT 
+                        DATE_FORMAT(FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(created_at)/300)*300), '%Y-%m-%d %H:%i:00') AS bucket,
+                        SUM(rain_mm) AS totalRain
+                   FROM ${TELEMETRY_TABLE}
+                   ${where}
+                   GROUP BY bucket
+                   ORDER BY bucket ASC`;
+        } else {
+            const by = '%Y-%m-%d %H:00:00';
+            sql = `SELECT 
+                        DATE_FORMAT(created_at, '${by}') AS bucket,
+                        SUM(rain_mm) AS totalRain
+                   FROM ${TELEMETRY_TABLE}
+                   ${where}
+                   GROUP BY bucket
+                   ORDER BY bucket ASC`;
+        }
+
+        const rows = await db.query(sql, params);
+        return res.json(rows.map(r => ({ bucket: r.bucket, totalRain: Number(r.totalRain || 0) })));
+    } catch (err) {
+        console.error('Rain aggregate error', err.message);
+        return res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+module.exports = router;

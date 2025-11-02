@@ -28,26 +28,17 @@
   justify-content:center; 
 }
 
+/* ===== LIQUID EFFECT CARDS ===== */
 .card{ 
   min-width:220px; 
-  padding:18px; 
+  padding:0;
+  height: 100px;
   border-radius:var(--radius); 
-  color:#fff; 
-  text-align:center; 
-  box-shadow:0 10px 30px rgba(0,0,0,.12); 
   position: relative;
   overflow: hidden;
+  box-shadow:0 10px 30px rgba(0,0,0,.12); 
   transform: translateY(0);
   transition: transform .25s ease, box-shadow .25s ease, filter .25s ease;
-}
-
-.card::after{
-  content:'';
-  position:absolute;
-  inset:0;
-  background: radial-gradient(120px 120px at 10% -10%, rgba(255,255,255,.45), rgba(255,255,255,0)),
-              radial-gradient(160px 120px at 110% 10%, rgba(255,255,255,.18), rgba(255,255,255,0));
-  pointer-events:none;
 }
 
 .card:hover{ 
@@ -56,20 +47,190 @@
   filter: saturate(1.05);
 }
 
+/* Liquid container */
+.liquid-container {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  height: 40%; /* Giảm từ 50% xuống 40% */
+  max-height: 80px; /* Giảm từ 100px xuống 80px */
+  transition: height 0.8s cubic-bezier(0.4, 0, 0.2, 1), 
+              background-color 0.5s ease;
+  z-index: 1;
+}
+
+/* Wave animation */
+.liquid-wave {
+  position: absolute;
+  top: -15px;  /* Tăng từ -10px lên -15px */
+  left: -50%;
+  width: 200%;
+  height: 25px;  /* Tăng từ 20px lên 25px để sóng cao hơn */
+  background: inherit;
+  border-radius: 43%;  /* Điều chỉnh độ cong */
+  animation: wave 2.5s ease-in-out infinite;  /* Đổi từ linear sang ease-in-out */
+}
+
+
+.liquid-wave:nth-child(2) {
+  top: -20px;  /* Tăng từ -15px */
+  height: 30px;  /* Sóng thứ 2 cao hơn */
+  opacity: 0.6;  /* Tăng từ 0.5 lên 0.6 */
+  animation: wave 3.5s ease-in-out infinite reverse;
+  border-radius: 47%;
+}
+.liquid-wave:nth-child(3) {
+  top: -12px;
+  height: 22px;
+  opacity: 0.4;
+  animation: wave 3s ease-in-out infinite;
+  border-radius: 45%;
+  animation-delay: -1s;  /* Lệch pha */
+}
+@keyframes wave {
+  0%, 100% { 
+    transform: translateX(0) rotate(0deg); 
+  }
+  25% {
+    transform: translateX(-15%) rotate(0.5deg);
+  }
+  50% { 
+    transform: translateX(-25%) rotate(-0.5deg); 
+  }
+  75% {
+    transform: translateX(-35%) rotate(0.3deg);
+  }
+}
+
+/* Card content overlay */
+.card-content {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  color: #fff;
+  text-align: center;
+}
+
 .card-emoji{ 
   font-size:22px; 
   margin-bottom:6px; 
   filter: drop-shadow(0 6px 10px rgba(0,0,0,.18));
+  position: relative;
+  z-index: 3;
 }
 
 /* Icon sizes for PNG icons */
 .icon-20{ width:20px; height:20px; display:inline-block; }
-.icon-24{ width:24px; height:24px; display:inline-block; }
+.icon-24{ width:36px; height:36px; display:inline-block; }
 
 /* Make fan icon larger without affecting others */
 .control-pill.device-fan .ctrl-left img{ width:40px; height:40px; }
 /* Make AC icon larger without affecting others */
 .control-pill.device-ac .ctrl-left img{ width:40px; height:40px; }
+
+.card-title{ 
+  font-weight:700;
+  position: relative;
+  z-index: 3;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.card-value{ 
+  font-size:24px; 
+  font-weight:700;
+  position: relative;
+  z-index: 3;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+/* Hiệu ứng đổi màu khi nhiệt độ thay đổi */
+.card-value.value-up{
+  animation: flashUp .9s ease;
+}
+
+.card-value.value-down{
+  animation: flashDown .9s ease;
+}
+
+@keyframes flashUp{
+  0%{ color:#ffffff; text-shadow:0 2px 8px rgba(0,0,0,0.3); }
+  20%{ color:#7CFF7C; text-shadow:0 0 15px rgba(124,255,124,1), 0 2px 8px rgba(0,0,0,0.3); }
+  60%{ color:#cfffce; text-shadow:0 0 10px rgba(124,255,124,.7), 0 2px 8px rgba(0,0,0,0.3); }
+  100%{ color:#ffffff; text-shadow:0 2px 8px rgba(0,0,0,0.3); }
+}
+
+@keyframes flashDown{
+  0%{ color:#ffffff; text-shadow:0 2px 8px rgba(0,0,0,0.3); }
+  20%{ color:#FF7C7C; text-shadow:0 0 15px rgba(255,124,124,1), 0 2px 8px rgba(0,0,0,0.3); }
+  60%{ color:#ffd0d0; text-shadow:0 0 10px rgba(255,124,124,.7), 0 2px 8px rgba(0,0,0,0.3); }
+  100%{ color:#ffffff; text-shadow:0 2px 8px rgba(0,0,0,0.3); }
+}
+
+/* Card background colors (for static background) */
+.card-temp{ 
+  background:linear-gradient(135deg,#dbeafe 0%, #bfdbfe 100%);
+}
+
+.card-humi{ 
+  background:linear-gradient(135deg,#fae8ff 0%, #f3e8ff 100%);
+}
+
+.card-light{ 
+  background:linear-gradient(135deg,#fed7aa 0%, #fdba74 100%);
+}
+
+.card-rain{
+  background:linear-gradient(135deg,#c7f0ff 0%, #87ceeb 100%);
+}
+
+/* Liquid colors - default states */
+#tempLiquid {
+  background: #3b82f6;
+}
+
+#lightLiquid {
+  background: #f59e0b;
+}
+
+#humiLiquid {
+  background: #06b6d4;
+}
+
+#rainLiquid {
+  background: #4dadea;
+}
+
+/* Loading state for card values */
+.card.loading .card-value{
+  position: relative;
+  color: rgba(255,255,255,.85);
+}
+
+.card.loading .card-value::after{
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 8px);
+  width: 84px;
+  height: 8px;
+  transform: translateX(-50%);
+  border-radius: 6px;
+  background: linear-gradient(90deg, rgba(255,255,255,.25), rgba(255,255,255,.45), rgba(255,255,255,.25));
+  background-size: 200% 100%;
+  animation: shimmer 1.2s infinite;
+}
+
+@keyframes shimmer{
+  0%{ background-position: 200% 0; }
+  100%{ background-position: -200% 0; }
+}
 
 /* ===== DEVICE ICON ANIMATIONS (Controls) ===== */
 .control-pill .ctrl-left{
@@ -77,7 +238,7 @@
   transition: transform .2s ease, filter .2s ease;
 }
 
-/* Điều hòa (AC) – hiệu ứng thổi gió (không quay) */
+/* Điều hòa (AC) – hiệu ứng thổi gió */
 .control-pill.device-ac .ctrl-left{ position: relative; }
 .control-pill.device-ac.on .ctrl-left{
   animation: acNudge 1.2s ease-in-out infinite;
@@ -174,83 +335,11 @@
   to{ transform: rotate(360deg) scale(1); }
 }
 
-.card-title{ 
-  font-weight:700; 
-}
-
-.card-value{ 
-  font-size:18px; 
-  font-weight:700; 
-}
-
-/* Hiệu ứng đổi màu khi nhiệt độ thay đổi */
-.card-value.value-up{
-  animation: flashUp .9s ease;
-}
-
-.card-value.value-down{
-  animation: flashDown .9s ease;
-}
-
-@keyframes flashUp{
-  0%{ color:#ffffff; text-shadow:none; }
-  20%{ color:#7CFF7C; text-shadow:0 0 10px rgba(124,255,124,.9); }
-  60%{ color:#cfffce; text-shadow:0 0 6px rgba(124,255,124,.5); }
-  100%{ color:#ffffff; text-shadow:none; }
-}
-
-@keyframes flashDown{
-  0%{ color:#ffffff; text-shadow:none; }
-  20%{ color:#FF7C7C; text-shadow:0 0 10px rgba(255,124,124,.9); }
-  60%{ color:#ffd0d0; text-shadow:0 0 6px rgba(255,124,124,.5); }
-  100%{ color:#ffffff; text-shadow:none; }
-}
-
-.card-temp{ 
-  background:linear-gradient(135deg,#79a7d3 0%, #6e8fbf 50%, #6a86b8 100%);
-  backdrop-filter: blur(6px);
-}
-
-.card-humi{ 
-  background:linear-gradient(135deg,#dba7e9 0%, #c78bd6 50%, #b87ec8 100%);
-  backdrop-filter: blur(6px);
-}
-
-.card-light{ 
-  background:linear-gradient(135deg,#f3a65c 0%, #f0974a 50%, #ee8b3b 100%);
-  backdrop-filter: blur(6px);
-}
-
-/* Loading state for card values */
-.card.loading .card-value{
-  position: relative;
-  color: rgba(255,255,255,.85);
-}
-
-.card.loading .card-value::after{
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: calc(100% + 8px);
-  width: 84px;
-  height: 8px;
-  transform: translateX(-50%);
-  border-radius: 6px;
-  background: linear-gradient(90deg, rgba(255,255,255,.25), rgba(255,255,255,.45), rgba(255,255,255,.25));
-  background-size: 200% 100%;
-  animation: shimmer 1.2s infinite;
-}
-
-@keyframes shimmer{
-  0%{ background-position: 200% 0; }
-  100%{ background-position: -200% 0; }
-}
-
 .table-panel{ 
   width:100%; 
   background:#fff; 
   border-radius:var(--radius); 
-  padding:20px; 
+  padding:36px; 
   box-shadow:var(--shadow); 
   border:1px solid rgba(0,0,0,0.04); 
 }
@@ -262,9 +351,9 @@
 
 .chart-panel{ 
   flex:1; 
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #667eea 0%, #667eea 0%);
   border-radius:var(--radius); 
-  padding:25px; 
+  padding:10px; 
   box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3);
   position: relative;
   overflow: hidden;
@@ -334,6 +423,21 @@
   transition:left .2s, background .2s; 
 }
 
+/* Trạng thái ARming (đèn đỏ trước khi bật ON) */
+.toggle.arming .toggle-track{
+  background:#fcd6d6; /* đỏ nhạt */
+}
+.toggle.arming .toggle-thumb{
+  background:#e53935; /* đỏ */
+  animation: redPulse .8s ease-in-out infinite;
+}
+
+@keyframes redPulse{
+  0%{ box-shadow:0 0 0 0 rgba(229,57,53,0.6); }
+  70%{ box-shadow:0 0 0 8px rgba(229,57,53,0); }
+  100%{ box-shadow:0 0 0 0 rgba(229,57,53,0); }
+}
+
 .toggle.on .toggle-track{ 
   background:#c6f0d2; 
 }
@@ -368,7 +472,6 @@
     justify-content:center; 
   }
 }
-
 
 @media (max-width:1000px){
   .cards-row{ 

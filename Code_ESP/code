@@ -1,17 +1,26 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
 #include <DHT.h>
 
 // =====================
-// Config WiFi + MQTT
+// Config WiFi + Server + MQTT
 // =====================
 #define WIFI_SSID "BruceLeeDuc"
 #define WIFI_PASSWORD "66662222"
+#define SERVER_IP "172.20.10.3"  // IP máy tính chạy server
+#define SERVER_PORT 3000
+#define API_TOKEN ""
+
+// MQTT Config (cho LED control)
 #define MQTT_SERVER "172.20.10.3"
 #define MQTT_PORT 1883
 #define MQTT_USER "levanduc"
 #define MQTT_PASSWORD "0602"
-#define TOPIC_SENSOR "dataSensor"
+
+// Định danh thiết bị
+#define DEVICE_ID "esp32-001"
 
 // =====================
 // Cấu hình chân
@@ -22,17 +31,28 @@
 #define LED2 16
 #define LED3 5
 #define LIGHT_SENSOR_PIN 36
+// LED cảnh báo mưa
+#define RAIN_LED 21
+// Ngưỡng mưa để NHẤP NHÁY LED (mm) — dải mưa 0..1000 (mặc định)
+float RAIN_THRESHOLD_MM = 100.0f;
+// Chu kỳ nhấp nháy (ms)
+#define RAIN_BLINK_INTERVAL_MS 300
 
 DHT dht(DHTPIN, DHTTYPE);
 WiFiClient espClient;
 PubSubClient client(espClient);
 
 unsigned long lastRead = 0;
+unsigned long lastRainBlink = 0;
+bool rainBlinkState = false;
+float currentRainMm = 0.0; // giá trị mưa hiện tại để điều khiển LED ở vòng lặp chính
+bool rainAlertActive = false;
 
 // Trạng thái LED (lưu để khôi phục sau khi reconnect)
 String led1State = "OFF";
 String led2State = "OFF";
 String led3State = "OFF";
+
 
 // =====================
 // Kết nối WiFi
@@ -50,11 +70,59 @@ void setup_wifi() {
 }
 
 // =====================
+// Hàm gửi dữ liệu sensor qua HTTP API + MQTT (thêm rain_mm)
+// =====================
+void sendSensorData(float temp, float humi, int light, float rainMm) {
+  // 1. Gửi qua HTTP API (để lưu vào database)
+  HTTPClient http;
+  String url = "http://" + String(SERVER_IP) + ":" + String(SERVER_PORT) + "/api/telemetry";
+  
+  http.begin(url);
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("x-api-token", API_TOKEN);
+  
+  DynamicJsonDocument doc(1024);
+  doc["deviceId"] = DEVICE_ID;
+  doc["data"]["temp"] = temp;
+  doc["data"]["humi"] = humi;
+  doc["data"]["light"] = light;
+  doc["data"]["rain_mm"] = rainMm;
+  // Không gửi timestamp, để server tự tạo theo giờ Việt Nam
+  
+  String payload;
+  serializeJson(doc, payload);
+  
+  Serial.println("📤 Gửi dữ liệu sensor qua HTTP API:");
+  int httpResponseCode = http.POST(payload);
+  
+  if (httpResponseCode > 0) {
+    Serial.printf("✅ HTTP Response: %d\n", httpResponseCode);
+  } else {
+    Serial.printf("❌ HTTP Error: %d\n", httpResponseCode);
+  }
+  http.end();
+  
+  // 2. Gửi qua MQTT (cho real-time display)
+  char mqttPayload[192];
+  snprintf(mqttPayload, sizeof(mqttPayload), "{\"temp\":%.1f,\"humi\":%.1f,\"light\":%d,\"rain_mm\":%.2f}", temp, humi, light, rainMm);
+  client.publish("dataSensor", mqttPayload);
+  Serial.println("📡 Gửi qua MQTT: dataSensor -> " + String(mqttPayload));
+}
+
+// =====================
 // Hàm điều khiển LED
 // =====================
 void setLED(int pin, String state, String topic) {
   digitalWrite(pin, state == "ON" ? HIGH : LOW);
   client.publish(topic.c_str(), state.c_str(), true); // retain = true
+  
+  // 🔄 Pub ngược lại activity cho server
+  String activityTopic = "activity/led" + String(pin == LED1 ? "1" : pin == LED2 ? "2" : "3");
+  String activityPayload = "{\"device\":\"led" + String(pin == LED1 ? "1" : pin == LED2 ? "2" : "3") + 
+                          "\",\"status\":\"" + state + "\",\"timestamp\":" + String(millis()) + "}";
+  
+  client.publish(activityTopic.c_str(), activityPayload.c_str());
+  Serial.printf("📤 Đã gửi activity: %s -> %s\n", activityTopic.c_str(), activityPayload.c_str());
 }
 
 // =====================
@@ -76,6 +144,14 @@ void callback(char* topic, byte* message, unsigned int length) {
   } else if (String(topic) == "control/led3") {
     led3State = msg;
     setLED(LED3, led3State, "device/led3/state");
+  } else if (String(topic) == "config/rain_threshold") {
+    float v = msg.toFloat();
+    if (v >= 0.0f && v <= 10000.0f) {
+      RAIN_THRESHOLD_MM = v;
+      Serial.printf("[CFG] Cập nhật ngưỡng mưa: %.2f mm\n", RAIN_THRESHOLD_MM);
+    } else {
+      Serial.printf("[CFG] Giá trị ngưỡng không hợp lệ: %s\n", msg.c_str());
+    }
   }
 }
 
@@ -85,22 +161,29 @@ void callback(char* topic, byte* message, unsigned int length) {
 void reconnect() {
   while (!client.connected()) {
     Serial.print("Kết nối MQTT...");
-    if (client.connect("ESP32Client", MQTT_USER, MQTT_PASSWORD)) {
+    // Tạo clientId duy nhất từ MAC để tránh trùng khi có nhiều thiết bị
+    String clientId = String("ESP32Client-") + WiFi.macAddress();
+    if (client.connect(clientId.c_str(), MQTT_USER, MQTT_PASSWORD)) {
       Serial.println(" Thành công");
       client.subscribe("control/led1");
       client.subscribe("control/led2");
       client.subscribe("control/led3");
+      // Subscribe nhận cấu hình ngưỡng mưa (retained)
+      client.subscribe("config/rain_threshold");
 
-      // 🔄 Khôi phục trạng thái LED sau khi reconnect
-      setLED(LED1, led1State, "device/led1/state");
-      setLED(LED2, led2State, "device/led2/state");
-      setLED(LED3, led3State, "device/led3/state");
+      // 🔄 Khôi phục trạng thái LED sau khi reconnect (không publish)
+      digitalWrite(LED1, led1State == "ON" ? HIGH : LOW);
+      digitalWrite(LED2, led2State == "ON" ? HIGH : LOW);
+      digitalWrite(LED3, led3State == "ON" ? HIGH : LOW);
+
+      // 🛰️ Yêu cầu server gửi lại trạng thái cuối cùng theo DB
+      String getStateTopic = String("devices/") + DEVICE_ID + "/get_state";
+      client.publish(getStateTopic.c_str(), "sync", false);
 
     } else {
       Serial.print(" Lỗi, rc=");
       Serial.print(client.state());
       Serial.println(" -> Thử lại sau 5 giây");
-
       // ⚡ Tắt LED khi mất kết nối
       digitalWrite(LED1, LOW);
       digitalWrite(LED2, LOW);
@@ -121,12 +204,19 @@ void setup() {
   pinMode(LED1, OUTPUT);
   pinMode(LED2, OUTPUT);
   pinMode(LED3, OUTPUT);
+  pinMode(RAIN_LED, OUTPUT);
+  digitalWrite(RAIN_LED, LOW);
 
   setup_wifi();
   client.setServer(MQTT_SERVER, MQTT_PORT);
   client.setCallback(callback);
 
   analogSetAttenuation(ADC_11db);
+
+  // Seed random cho giả lập mưa
+  randomSeed(esp_random());
+
+  // Đợi WiFi sẵn sàng rồi yêu cầu đồng bộ ngay lần đầu (sẽ được gửi khi reconnect thành công)
 }
 
 // =====================
@@ -139,11 +229,15 @@ void loop() {
   client.loop();
 
   unsigned long now = millis();
-  if (now - lastRead >= 3000) {
+  if (now - lastRead >= 5000) {  // Gửi mỗi 5 giây
     lastRead = now;
     float h = dht.readHumidity();
     float t = dht.readTemperature();
-    int lightValue = analogRead(LIGHT_SENSOR_PIN);
+    int lightValue = 4095 - analogRead(LIGHT_SENSOR_PIN); // Đảo ngược: sáng = giá trị cao, tối = giá trị thấp
+    // Giả lập lượng mưa 0..1000 (mm). Có thể đổi biên độ nếu cần
+    float rainMm = (float)random(0, 1001);
+    currentRainMm = rainMm;               // cập nhật giá trị dùng cho nhấp nháy ngoài block
+    rainAlertActive = (currentRainMm > RAIN_THRESHOLD_MM);
 
     if (isnan(h) || isnan(t)) {
       Serial.println("Lỗi đọc DHT11!");
@@ -152,8 +246,19 @@ void loop() {
 
     Serial.printf("Nhiệt độ: %.1f °C, Độ ẩm: %.1f %%, Ánh sáng: %d\n", t, h, lightValue);
 
-    char payload[128];
-    snprintf(payload, sizeof(payload), "{\"temp\":%.1f,\"humi\":%.1f,\"light\":%d}", t, h, lightValue);
-    client.publish(TOPIC_SENSOR, payload);
+    // Gửi dữ liệu
+    sendSensorData(t, h, lightValue, rainMm);
+  }
+
+  // Khối nhấp nháy LED chạy mỗi vòng lặp (không phụ thuộc chu kỳ 5s)
+  if (rainAlertActive) {
+    if (now - lastRainBlink >= RAIN_BLINK_INTERVAL_MS) {
+      lastRainBlink = now;
+      rainBlinkState = !rainBlinkState;
+      digitalWrite(RAIN_LED, rainBlinkState ? HIGH : LOW);
+    }
+  } else {
+    rainBlinkState = false;
+    digitalWrite(RAIN_LED, LOW);
   }
 }
