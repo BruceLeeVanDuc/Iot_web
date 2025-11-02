@@ -88,6 +88,7 @@ Mở trình duyệt và truy cập: **http://localhost:3000**
 - **Styling**: CSS Grid, Flexbox, CSS Variables
 - **Icons**: Emoji icons
 - **Charts**: Canvas API
+- **CSDL**: MySQL
 
 ## 📝 Scripts có sẵn
 
@@ -117,4 +118,4 @@ Nếu gặp vấn đề, hãy kiểm tra:
 ---
 
 **Tác giả**: Lê Văn Đức - B22DCCN228  
-**GitHub**: https://github.com/BruceLeeVanDuc/Web1
+**GitHub**: https://github.com/BruceLeeVanDuc/Iot_web
