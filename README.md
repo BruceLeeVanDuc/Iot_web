@@ -47,14 +47,6 @@ npm run dev
 ### Bước 3: Truy cập ứng dụng
 Mở trình duyệt và truy cập: **http://localhost:3000**
 
-##  Các trang có sẵn
-
-| Trang | URL | Mô tả |
-|-------|-----|-------|
-|  Trang chính | http://localhost:3000/ | Dashboard điều khiển thiết bị IoT |
-|  Đăng ký | http://localhost:3000/DangKy/register.html | Tạo tài khoản mới |
-|  Profile | http://localhost:3000/Profile/my-profile.html | Thông tin cá nhân |
-
 ##  Tính năng
 
 ### Dashboard chính (Trang_Chinh)
@@ -79,11 +71,11 @@ Mở trình duyệt và truy cập: **http://localhost:3000**
 
 - **Frontend**: HTML5, CSS3, JavaScript (ES6+)
 - **Backend**: Node.js, Express.js
-- Xampp(mysql)
+- CSDL : Mysql
 ## Scripts có sẵn
 
 ```bash
 npm start          # Chạy server production
 npm run dev        # Chạy server development với nodemon
 
-**Tác giả**: Lê Văn Đức - B22DCCN228  
+  
