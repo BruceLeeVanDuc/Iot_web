@@ -1,0 +1,539 @@
+{
+	"info": {
+		"_postman_id": "iot-api-collection",
+		"name": "IoT Minimal API1 (with API Token)",
+		"description": "Collection API IoT với tên tiếng Việt cho dữ liệu cảm biến và điều khiển thiết bị",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Dữ Liệu Cảm Biến (Sensor Data)",
+			"item": [
+				{
+					"name": "Gửi Dữ Liệu Cảm Biến (POST)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "x-api-token",
+								"value": "{{api_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"deviceId\": \"esp32\",\n  \"data\": {\n    \"temp\": 25.5,\n    \"humi\": 60.2,\n    \"light\": 450\n  },\n  \"timestamp\": \"2024-01-15T10:30:00Z\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/telemetry",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"telemetry"
+							]
+						},
+						"description": "Gửi dữ liệu cảm biến từ ESP32 lên server"
+					},
+					"response": []
+				},
+				{
+					"name": "Lấy Dữ Liệu Cảm Biến (GET)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-api-token",
+								"value": "{{api_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/telemetry?deviceId=esp32&limit=100&sortField=created_at&sortOrder=desc",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"telemetry"
+							],
+							"query": [
+								{
+									"key": "deviceId",
+									"value": "esp32"
+								},
+								{
+									"key": "limit",
+									"value": "100"
+								},
+								{
+									"key": "sortField",
+									"value": "created_at"
+								},
+								{
+									"key": "sortOrder",
+									"value": "desc"
+								}
+							]
+						},
+						"description": "Lấy dữ liệu cảm biến từ database"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Sắp Xếp Dữ Liệu (Sort Data)",
+			"item": [
+				{
+					"name": "Sắp Xếp Theo Nhiệt Độ (Tăng ...)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-api-token",
+								"value": "{{api_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/telemetry?deviceId=esp32&limit=50&sortField=temp&sortOrder=asc",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"telemetry"
+							],
+							"query": [
+								{
+									"key": "deviceId",
+									"value": "esp32"
+								},
+								{
+									"key": "limit",
+									"value": "50"
+								},
+								{
+									"key": "sortField",
+									"value": "temp"
+								},
+								{
+									"key": "sortOrder",
+									"value": "asc"
+								}
+							]
+						},
+						"description": "Sắp xếp dữ liệu theo nhiệt độ tăng dần"
+					},
+					"response": []
+				},
+				{
+					"name": "Sắp Xếp Theo Nhiệt Độ (Giảm ...)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-api-token",
+								"value": "{{api_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/telemetry?deviceId=esp32&limit=50&sortField=temp&sortOrder=desc",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"telemetry"
+							],
+							"query": [
+								{
+									"key": "deviceId",
+									"value": "esp32"
+								},
+								{
+									"key": "limit",
+									"value": "50"
+								},
+								{
+									"key": "sortField",
+									"value": "temp"
+								},
+								{
+									"key": "sortOrder",
+									"value": "desc"
+								}
+							]
+						},
+						"description": "Sắp xếp dữ liệu theo nhiệt độ giảm dần"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Tìm Kiếm Theo Giá Trị (Search by Value)",
+			"item": [
+				{
+					"name": "Tìm Kiếm Theo Nhiệt Độ",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-api-token",
+								"value": "{{api_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/telemetry/search?field=temp&value=25.5&tolerance=2&limit=50",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"telemetry",
+								"search"
+							],
+							"query": [
+								{
+									"key": "field",
+									"value": "temp"
+								},
+								{
+									"key": "value",
+									"value": "25.5"
+								},
+								{
+									"key": "tolerance",
+									"value": "2"
+								},
+								{
+									"key": "limit",
+									"value": "50"
+								}
+							]
+						},
+						"description": "Tìm kiếm dữ liệu theo nhiệt độ với dung sai cho phép"
+					},
+					"response": []
+				},
+				{
+					"name": "Tìm Kiếm Theo Độ Ẩm",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-api-token",
+								"value": "{{api_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/telemetry/search?field=humi&value=60.2&tolerance=5&limit=50",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"telemetry",
+								"search"
+							],
+							"query": [
+								{
+									"key": "field",
+									"value": "humi"
+								},
+								{
+									"key": "value",
+									"value": "60.2"
+								},
+								{
+									"key": "tolerance",
+									"value": "5"
+								},
+								{
+									"key": "limit",
+									"value": "50"
+								}
+							]
+						},
+						"description": "Tìm kiếm dữ liệu theo độ ẩm với dung sai cho phép"
+					},
+					"response": []
+				},
+				{
+					"name": "Tìm Kiếm Theo Ánh Sáng",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-api-token",
+								"value": "{{api_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/telemetry/search?field=light&value=450&tolerance=50&limit=50",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"telemetry",
+								"search"
+							],
+							"query": [
+								{
+									"key": "field",
+									"value": "light"
+								},
+								{
+									"key": "value",
+									"value": "450"
+								},
+								{
+									"key": "tolerance",
+									"value": "50"
+								},
+								{
+									"key": "limit",
+									"value": "50"
+								}
+							]
+						},
+						"description": "Tìm kiếm dữ liệu theo ánh sáng với dung sai cho phép"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "API Biểu Đồ (Chart API)",
+			"item": [
+				{
+					"name": "Dữ Liệu Cho Biểu Đồ",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-api-token",
+								"value": "{{api_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/telemetry/chart?deviceId=esp32&hours=24&interval=1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"telemetry",
+								"chart"
+							],
+							"query": [
+								{
+									"key": "deviceId",
+									"value": "esp32"
+								},
+								{
+									"key": "hours",
+									"value": "24"
+								},
+								{
+									"key": "interval",
+									"value": "1"
+								}
+							]
+						},
+						"description": "Lấy dữ liệu cho biểu đồ theo khoảng thời gian"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Điều Khiển Đèn (Light Control)",
+			"item": [
+				{
+					"name": "Bật Đèn (POST)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "x-api-token",
+								"value": "{{api_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"device\": \"den\",\n  \"status\": \"on\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/control",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"control"
+							]
+						},
+						"description": "Bật đèn thông qua MQTT"
+					},
+					"response": []
+				},
+				{
+					"name": "Tắt Đèn (POST)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "x-api-token",
+								"value": "{{api_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"device\": \"den\",\n  \"status\": \"off\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/control",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"control"
+							]
+						},
+						"description": "Tắt đèn thông qua MQTT"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Lịch Sử Điều Khiển (Control History)",
+			"item": [
+				{
+					"name": "Lấy Lịch Sử Điều Khiển",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-api-token",
+								"value": "{{api_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/control?limit=50&sortField=created_at&sortOrder=desc",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"control"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "50"
+								},
+								{
+									"key": "sortField",
+									"value": "created_at"
+								},
+								{
+									"key": "sortOrder",
+									"value": "desc"
+								}
+							]
+						},
+						"description": "Lấy lịch sử điều khiển thiết bị"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Health - Check API",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "x-api-token",
+						"value": "{{api_token}}"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/health",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"health"
+					]
+				},
+				"description": "Kiểm tra trạng thái API và kết nối database"
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3000",
+			"type": "string"
+		},
+		{
+			"key": "api_token",
+			"value": "",
+			"type": "string"
+		}
+	]
+}
