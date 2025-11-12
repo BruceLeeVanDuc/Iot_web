@@ -29,6 +29,32 @@ function formatTelemetryRow(row) {
     return out;
 }
 
+// Helper: error logging with cooldown
+function logError(message, err) {
+    const now = Date.now();
+    if (now - lastTelemetryErrorTime > TELEMETRY_ERROR_COOLDOWN) {
+        console.error(message, err?.message || err);
+        lastTelemetryErrorTime = now;
+    }
+}
+
+// Helper: validate and parse date
+function parseDate(dateStr) {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    return !isNaN(d.getTime()) ? d : null;
+}
+
+// Helper: build WHERE clause
+function buildWhereClause(filters) {
+    const clauses = [];
+    const params = [];
+    if (filters.deviceId) { clauses.push('device_id = ?'); params.push(filters.deviceId); }
+    if (filters.since) { const d = parseDate(filters.since); if (d) { clauses.push('created_at >= ?'); params.push(d); } }
+    if (filters.until) { const d = parseDate(filters.until); if (d) { clauses.push('created_at <= ?'); params.push(d); } }
+    return { where: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '', params };
+}
+
 // Ensure rain column exists (MySQL 8+ supports IF NOT EXISTS)
 async function ensureRainColumn() {
     try {
@@ -59,17 +85,15 @@ router.post('/telemetry', requireApiToken, async (req, res) => {
         };
         
         // Debug log: inbound payload and client IP
-        try {
-            const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
-            console.log(`[Telemetry] POST from ${ip} deviceId=${deviceId} data=`, data);
-        } catch (_) {}
+        const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+        console.log(`[Telemetry] POST from ${ip} deviceId=${deviceId} data=`, data);
 
         let result;
         try {
             result = await tryInsert();
         } catch (e) {
             // If missing column, try to add then retry once
-            const msg = String(e && e.message || '');
+            const msg = String(e?.message || '');
             if (msg.includes('Unknown column') || msg.includes('ER_BAD_FIELD_ERROR')) {
                 await ensureRainColumn();
                 result = await tryInsert();
@@ -79,20 +103,17 @@ router.post('/telemetry', requireApiToken, async (req, res) => {
         }
         
         // Emit realtime event for SSE subscribers
-        try {
-            telemetryBus.emit('new', {
-                id: result.insertId,
-                deviceId,
-                temp: temp || 0,
-                humi: humi || 0,
-                light: light || 0,
-                rain: rain_mm || 0,
-                createdAt: createdAt.toISOString()
-            });
-        } catch (_) {}
+        telemetryBus.emit('new', {
+            id: result.insertId,
+            deviceId,
+            temp: temp || 0,
+            humi: humi || 0,
+            light: light || 0,
+            rain: rain_mm || 0,
+            createdAt: createdAt.toISOString()
+        });
 
-        // Debug log: inserted row id
-        try { console.log('[Telemetry] Inserted row id =', result.insertId); } catch (_) {}
+        console.log('[Telemetry] Inserted row id =', result.insertId);
 
         // Return success with input data for verification
         return res.json({ 
@@ -112,7 +133,7 @@ router.post('/telemetry', requireApiToken, async (req, res) => {
         });
         
     } catch (err) {
-        console.error('Telemetry ingest error', err);
+        logError('Telemetry ingest error', err);
         return res.status(500).json({ error: 'Internal Server Error' });
     }
 });
@@ -120,34 +141,8 @@ router.post('/telemetry', requireApiToken, async (req, res) => {
 // GET /api/telemetry -> list telemetry with filters
 router.get('/telemetry', async (req, res) => {
     try {
-        const { deviceId, limit = 100, since, until, sortField, sortOrder } = req.query;
-        
-        // Build WHERE clause dynamically với kiểm tra tham số thời gian hợp lệ
-        const clauses = [];
-        const params = [];
-        
-        if (deviceId) { 
-            clauses.push('device_id = ?'); 
-            params.push(deviceId); 
-        }
-        
-        if (since) {
-            const d = new Date(since);
-            if (!isNaN(d.getTime())) { 
-                clauses.push('created_at >= ?'); 
-                params.push(d); 
-            }
-        }
-        
-        if (until) { 
-            const d = new Date(until);
-            if (!isNaN(d.getTime())) {
-                clauses.push('created_at <= ?'); 
-                params.push(d); 
-            }
-        }
-        
-        const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+        const { limit = 100, sortField, sortOrder } = req.query;
+        const { where, params } = buildWhereClause(req.query);
         const lim = Math.min(Number(limit) || 100, 1000);
         
         // Build ORDER BY clause
@@ -173,13 +168,8 @@ router.get('/telemetry', async (req, res) => {
         const rows = await db.query(sql, params);
         const formatted = Array.isArray(rows) ? rows.map(r => formatTelemetryRow(r)) : rows;
         return res.json(formatted);
-        
     } catch (err) {
-        const now = Date.now();
-        if (now - lastTelemetryErrorTime > TELEMETRY_ERROR_COOLDOWN) {
-            console.error('Telemetry fetch error', err.message);
-            lastTelemetryErrorTime = now;
-        }
+        logError('Telemetry fetch error', err);
         return res.status(500).json({ error: 'Internal Server Error' });
     }
 });
@@ -206,13 +196,8 @@ router.get('/telemetry/latest', requireApiToken, async (req, res) => {
         }
         
         return res.json(formatTelemetryRow(rows[0]));
-        
     } catch (err) {
-        const now = Date.now();
-        if (now - lastTelemetryErrorTime > TELEMETRY_ERROR_COOLDOWN) {
-            console.error('Latest telemetry fetch error', err.message);
-            lastTelemetryErrorTime = now;
-        }
+        logError('Latest telemetry fetch error', err);
         return res.status(500).json({ error: 'Internal Server Error' });
     }
 });
@@ -255,13 +240,8 @@ router.get('/telemetry/stats', requireApiToken, async (req, res) => {
         }
         
         return res.json(rows[0]);
-        
     } catch (err) {
-        const now = Date.now();
-        if (now - lastTelemetryErrorTime > TELEMETRY_ERROR_COOLDOWN) {
-            console.error('Telemetry stats error', err.message);
-            lastTelemetryErrorTime = now;
-        }
+        logError('Telemetry stats error', err);
         return res.status(500).json({ error: 'Internal Server Error' });
     }
 });
@@ -287,21 +267,15 @@ router.get('/telemetry/search', requireApiToken, async (req, res) => {
             return res.status(400).json({ error: 'value must be a number' });
         }
 
-        // Với temp/humi (kiểu FLOAT), so sánh theo làm tròn 1 chữ số để khớp dữ liệu hiển thị
+        // Với temp/humi (kiểu FLOAT), so sánh theo làm tròn để khớp dữ liệu hiển thị
         const isLight = col === 'light';
         const isRain = col === 'rain_mm';
-        const rounded1 = Number(numericValue.toFixed(1));
-        const rounded2 = Number(numericValue.toFixed(2));
-        const clauses = isLight
-            ? [`${col} = ?`]
-            : isRain
-                ? [`(ROUND(${col}, 2) = ? OR ${col} = ?)`]
-                : [`(ROUND(${col}, 1) = ? OR ${col} = ?)`];
-        const params = isLight
-            ? [numericValue]
-            : isRain
-                ? [rounded2, rounded2]
-                : [rounded1, Math.trunc(numericValue)];
+        const clauses = isLight ? [`${col} = ?`] 
+            : isRain ? [`(ROUND(${col}, 2) = ? OR ${col} = ?)`]
+            : [`(ROUND(${col}, 1) = ? OR ${col} = ?)`];
+        const params = isLight ? [numericValue]
+            : isRain ? [Number(numericValue.toFixed(2)), Number(numericValue.toFixed(2))]
+            : [Number(numericValue.toFixed(1)), Math.trunc(numericValue)];
 
         if (deviceId) {
             clauses.push('device_id = ?');
@@ -321,7 +295,7 @@ router.get('/telemetry/search', requireApiToken, async (req, res) => {
         const formatted = Array.isArray(rows) ? rows.map(r => formatTelemetryRow(r)) : rows;
         return res.json(formatted);
     } catch (err) {
-        console.error('Telemetry search error', err.message);
+        logError('Telemetry search error', err);
         return res.status(500).json({ error: 'Internal Server Error' });
     }
 });
@@ -340,7 +314,8 @@ router.get('/telemetry/search-any', requireApiToken, async (req, res) => {
             return res.status(400).json({ error: 'value must be a number' });
         }
 
-        const rounded = Number(numericValue.toFixed(1));
+        const rounded1 = Number(numericValue.toFixed(1));
+        const rounded2 = Number(numericValue.toFixed(2));
         const integer = Math.trunc(numericValue);
         const clauses = [
             '(ROUND(temp, 1) = ? OR temp = ?)',
@@ -348,8 +323,7 @@ router.get('/telemetry/search-any', requireApiToken, async (req, res) => {
             '(light = ?)',
             '(ROUND(rain_mm, 2) = ? OR rain_mm = ?)'
         ];
-
-        const params = [rounded, integer, rounded, integer, numericValue, Number(numericValue.toFixed(2)), Number(numericValue.toFixed(2))];
+        const params = [rounded1, integer, rounded1, integer, numericValue, rounded2, rounded2];
 
         let where = `WHERE (${clauses.join(' OR ')})`;
         if (deviceId) {
@@ -368,7 +342,7 @@ router.get('/telemetry/search-any', requireApiToken, async (req, res) => {
         const formatted = Array.isArray(rows) ? rows.map(r => formatTelemetryRow(r)) : rows;
         return res.json(formatted);
     } catch (err) {
-        console.error('Telemetry search-any error', err.message);
+        logError('Telemetry search-any error', err);
         return res.status(500).json({ error: 'Internal Server Error' });
     }
 });
@@ -414,9 +388,7 @@ router.get('/telemetry/stream', requireApiToken, async (req, res) => {
 
     // Listener for new telemetry events
     const onNewTelemetry = (payload) => {
-        try {
-            res.write(`data: ${JSON.stringify(payload)}\n\n`);
-        } catch (_) {}
+        try { res.write(`data: ${JSON.stringify(payload)}\n\n`); } catch (_) {}
     };
     telemetryBus.on('new', onNewTelemetry);
 
@@ -433,12 +405,7 @@ router.get('/telemetry/rain/aggregate', requireApiToken, async (req, res) => {
     try {
         const { deviceId, from, to, interval = 'hour' } = req.query;
 
-        const clauses = [];
-        const params = [];
-        if (deviceId) { clauses.push('device_id = ?'); params.push(deviceId); }
-        if (from) { const d = new Date(from); if (!isNaN(d)) { clauses.push('created_at >= ?'); params.push(d); } }
-        if (to) { const d = new Date(to); if (!isNaN(d)) { clauses.push('created_at <= ?'); params.push(d); } }
-        const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+        const { where, params } = buildWhereClause({ deviceId, since: from, until: to });
 
         const intv = String(interval).toLowerCase();
         let sql;
@@ -474,7 +441,7 @@ router.get('/telemetry/rain/aggregate', requireApiToken, async (req, res) => {
         const rows = await db.query(sql, params);
         return res.json(rows.map(r => ({ bucket: r.bucket, totalRain: Number(r.totalRain || 0) })));
     } catch (err) {
-        console.error('Rain aggregate error', err.message);
+        logError('Rain aggregate error', err);
         return res.status(500).json({ error: 'Internal Server Error' });
     }
 });
