@@ -51,9 +51,9 @@ Mở trình duyệt và truy cập: **http://localhost:3000**
 
 | Trang | URL | Mô tả |
 |-------|-----|-------|
-| 🏠 Trang chính | http://localhost:3000/ | Dashboard điều khiển thiết bị IoT |
-| 📝 Đăng ký | http://localhost:3000/DangKy/register.html | Tạo tài khoản mới |
-| 👤 Profile | http://localhost:3000/Profile/my-profile.html | Thông tin cá nhân |
+|  Trang chính | http://localhost:3000/ | Dashboard điều khiển thiết bị IoT |
+|  Đăng ký | http://localhost:3000/DangKy/register.html | Tạo tài khoản mới |
+|  Profile | http://localhost:3000/Profile/my-profile.html | Thông tin cá nhân |
 
 ## 🛠️ Tính năng
 
