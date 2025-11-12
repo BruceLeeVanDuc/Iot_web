@@ -58,31 +58,24 @@ Mở trình duyệt và truy cập: **http://localhost:3000**
 ## 🛠️ Tính năng
 
 ### Dashboard chính (Trang_Chinh)
-- 📊 Hiển thị dữ liệu cảm biến real-time
-- 🌡️ Theo dõi nhiệt độ, độ ẩm, ánh sáng
-- 💡 Điều khiển thiết bị (quạt, đèn, điều hòa, bơm nước)
-- 📈 Biểu đồ dữ liệu tương tác
+-  Hiển thị dữ liệu cảm biến real-time
+-  Theo dõi nhiệt độ, độ ẩm, ánh sáng
+-  Điều khiển thiết bị (quạt, đèn, điều hòa, bơm nước)
+-  Biểu đồ dữ liệu tương tác
 
 ### Trang đăng ký (DangKy)
-- 📝 Form đăng ký tài khoản đầy đủ
-- ✅ Validation dữ liệu đầu vào
-- 🎨 Giao diện hiện đại, responsive
-- 🔒 Bảo mật mật khẩu
+-  Form đăng ký tài khoản đầy đủ
+-  Validation dữ liệu đầu vào
+-  Giao diện hiện đại, responsive
+-  Bảo mật mật khẩu
 
 ### Trang profile (Profile)
-- 👤 Hiển thị thông tin cá nhân
-- 📋 Thông tin sinh viên, quê quán
-- 🔗 Liên kết GitHub
-- 🎨 Thiết kế theo phong cách Figma
-
-## 🔧 API Endpoints
-
-| Endpoint | Method | Mô tả |
-|----------|--------|-------|
-| `/api/status` | GET | Kiểm tra trạng thái server |
-
+-  Hiển thị thông tin cá nhân
+-  Thông tin sinh viên, quê quán
+-  Liên kết GitHub
+-  Thiết kế theo phong cách Figma
+-  
 ## 🎨 Công nghệ sử dụng
-
 - **Frontend**: HTML5, CSS3, JavaScript (ES6+)
 - **Backend**: Node.js, Express.js
 - **Styling**: CSS Grid, Flexbox, CSS Variables
@@ -96,26 +89,9 @@ Mở trình duyệt và truy cập: **http://localhost:3000**
 npm start          # Chạy server production
 npm run dev        # Chạy server development với nodemon
 ```
-
-## 🛑 Dừng server
-
-Nhấn `Ctrl + C` trong terminal để dừng server.
-
-## 🔄 Cập nhật
-
 Để cập nhật dependencies:
 ```bash
 npm update
 ```
-
-## 📞 Hỗ trợ
-
-Nếu gặp vấn đề, hãy kiểm tra:
-1. Node.js đã được cài đặt chưa
-2. Port 3000 có bị chiếm dụng không
-3. Tất cả dependencies đã được cài đặt
-
----
-
 **Tác giả**: Lê Văn Đức - B22DCCN228  
 **GitHub**: https://github.com/BruceLeeVanDuc/Iot_web
