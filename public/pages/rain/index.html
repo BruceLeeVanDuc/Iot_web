@@ -45,6 +45,7 @@
     
     function getToken(){return localStorage.getItem('apiToken')||''}
     
+    // ... (Giữ nguyên hàm fetchRain24h, formatTime, renderChart, load) ...
     async function fetchRain24h(){
       const qs = new URLSearchParams();
       qs.set('deviceId', DEVICE_ID);
@@ -132,25 +133,46 @@
       catch(e){ console.error(e); }
     }
 
-    load();
-    // tự refresh mỗi 5s để xem realtime giống trang home
-   
+    // --- PHẦN SỬA ĐỔI ---
+
+    // 1. Hàm load giá trị đã lưu khi mở trang
+    function loadSavedThreshold() {
+      const saved = localStorage.getItem('rainThreshold_val');
+      if (saved) {
+        document.getElementById('rainThreshold').value = saved;
+      }
+    }
+
     async function setRainThreshold(){
-      const v = Number(document.getElementById('rainThreshold').value || '0');
+      let v = Number(document.getElementById('rainThreshold').value || '0');
+      
+      // --- THÊM ĐOẠN KIỂM TRA NÀY ---
+      if (v < 0) v = 0;
+      if (v > 1000) {
+        alert('Lượng mưa tối đa chỉ là 1000mm. Đã đặt lại về 1000.');
+        v = 1000;
+        document.getElementById('rainThreshold').value = 1000;
+      }
+      // ------------------------------
+
       try {
         const res = await fetch(`${API_BASE}/config/rain-threshold`, {
           method:'POST', headers:{'Content-Type':'application/json','x-api-token':getToken()},
           body: JSON.stringify({ threshold: v })
         });
+        
         if(!res.ok){ throw new Error('HTTP '+res.status); }
+        
+        localStorage.setItem('rainThreshold_val', v);
+
         const msg = document.getElementById('saveMsg');
         msg.style.display = 'inline';
         setTimeout(()=> msg.style.display = 'none', 1500);
       } catch (e) { alert('Lưu ngưỡng thất bại'); }
     }
+
+    // Khởi chạy
+    load();
+    loadSavedThreshold(); // Gọi hàm load lại giá trị cũ
     document.getElementById('btnSetThreshold').addEventListener('click', setRainThreshold);
   </script>
-</body>
-</html>
-
-

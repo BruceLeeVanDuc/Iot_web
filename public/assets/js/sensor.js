@@ -120,7 +120,7 @@ try {
 function mapSensorData(item) {
   const createdAtDate = new Date(item.createdAt);
   // Chuyển đổi sang giờ Việt Nam (UTC+7)
-  const vietnamTime = new Date(createdAtDate.getTime() + (7 * 60 * 60 * 1000));
+  const vietnamTime = createdAtDate;
   const year = vietnamTime.getFullYear();
   const month = String(vietnamTime.getMonth() + 1).padStart(2, '0');
   const day = String(vietnamTime.getDate()).padStart(2, '0');

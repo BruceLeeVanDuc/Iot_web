@@ -20,7 +20,8 @@ async function getPool() {
             idleTimeout: 300000, // 5 phút idle timeout
             // Thêm các cấu hình để tránh ngắt kết nối
             charset: 'utf8mb4',
-            timezone: '+00:00',
+            dateStrings: true,
+            //timezone: '+00:00',
             // Cấu hình encoding để hỗ trợ tiếng Việt
             supportBigNumbers: true,
             bigNumberStrings: true,

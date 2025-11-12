@@ -1,231 +1,162 @@
+// server/utils/mqtt.js
 const mqtt = require('mqtt');
-
 const db = require('../db');
 
-
-
 const MQTT_URL = process.env.MQTT_URL || `mqtt://${process.env.MQTT_HOST || 'localhost'}:${process.env.MQTT_PORT || 1883}`;
-
 const MQTT_USER = process.env.MQTT_USER || '';
-
 const MQTT_PASSWORD = process.env.MQTT_PASSWORD || '';
-
 const COMMANDS_TABLE = process.env.TABLE_COMMANDS || 'device_commands';
-
-
+const TELEMETRY_TABLE = process.env.TABLE_TELEMETRY || 'telemetry';
 
 let mqttClient;
-
 let io;
 
-
-
 function initializeMqttClient(socketIoInstance) {
-
   io = socketIoInstance;
-
   mqttClient = mqtt.connect(MQTT_URL, {
-
     username: MQTT_USER || undefined,
-
     password: MQTT_PASSWORD || undefined
-
   });
 
- 
-
   mqttClient.on('connect', () => {
-
-    console.log('[MQTT]  Connected to broker:', MQTT_URL);
-
-   
-
+    console.log('[MQTT] Connected to broker:', MQTT_URL);
+    
+    // Subscribe topic dữ liệu cảm biến
     mqttClient.subscribe('dataSensor');
-
+    
+    // Subscribe topic trạng thái thiết bị
     mqttClient.subscribe('device/+/state');
+    
+    // Subscribe topic hỏi trạng thái
+    mqttClient.subscribe('devices/+/get_state');
 
-   
-
-    // Lắng nghe topic "hỏi trạng thái"
-
-    const getStateTopic = 'devices/+/get_state';
-
-    mqttClient.subscribe(getStateTopic, (err) => {
-
-        if (!err) console.log(`[MQTT] Subscribed to topic hỏi trạng thái: ${getStateTopic}`);
-
-    });
-
-    // Clear retained messages on control topics to avoid applying stale commands when device reconnects
+    // Clear retained messages (như cũ)
     try {
       ['control/led1', 'control/led2', 'control/led3'].forEach((t) => {
         mqttClient.publish(t, '', { qos: 1, retain: true });
       });
-      console.log('[MQTT]  Cleared retained control topics');
-    } catch (err) {
-      console.error('[MQTT]  Error clearing retained control topics', err);
-    }
-
-
-
+    } catch (err) { console.error(err); }
   });
 
- 
-
-  mqttClient.on('error', (e) => console.error('[MQTT]  Error:', e.message));
-
- 
+  mqttClient.on('error', (e) => console.error('[MQTT] Error:', e.message));
 
   mqttClient.on('message', async (topic, message) => {
-
-    const payload = message.toString();
-
-    console.log(`[MQTT]  Received message [${topic}]: ${payload}`);
-
-   
-
-    // Gửi cập nhật trạng thái tới trình duyệt qua WebSocket
-
-    if (topic.startsWith('device/') && topic.endsWith('/state')) {
-
-      const deviceId = topic.split('/')[1];
-
-      if (io) {
-
-        io.emit('ledStateChange', { device: deviceId, state: payload });
-
-        console.log(`[Socket.IO] Gửi sự kiện 'ledStateChange' cho ${deviceId}`);
-
-      }
-
-
-
-      // LƯU DB: cập nhật bảng lệnh bằng trạng thái thực tế từ ESP
-
+    const payloadStr = message.toString();
+    
+    // === XỬ LÝ DỮ LIỆU CẢM BIẾN (Mới thêm) ===
+    // === XỬ LÝ DỮ LIỆU CẢM BIẾN ===
+    if (topic === 'dataSensor') {
       try {
+          const data = JSON.parse(payloadStr);
+          const deviceId = data.deviceId || 'esp32-001';
+          const temp = data.temp || 0;
+          const humi = data.humi || 0;
+          const light = data.light || 0;
+          const rain = data.rain_mm || 0;
+          
+          // --- SỬA ĐỔI: Tự format thành chuỗi YYYY-MM-DD HH:mm:ss theo giờ VN ---
+          // Cách này ép cứng giờ VN, không phụ thuộc vào server hay driver nữa
+          const d = new Date();
+          const vnDate = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+          const y = vnDate.getFullYear();
+          const m = String(vnDate.getMonth() + 1).padStart(2, '0');
+          const day = String(vnDate.getDate()).padStart(2, '0');
+          const h = String(vnDate.getHours()).padStart(2, '0');
+          const min = String(vnDate.getMinutes()).padStart(2, '0');
+          const s = String(vnDate.getSeconds()).padStart(2, '0');
+          
+          const nowStr = `${y}-${m}-${day} ${h}:${min}:${s}`;
+          // --------------------------------------------------------------------
 
-        const state = String(payload).trim().toUpperCase();
+          console.log(`[MQTT] Nhận dataSensor: Temp=${temp}, Humi=${humi}, Rain=${rain} Time=${nowStr}`);
 
-        // Chỉ lưu khi state hợp lệ
-        if (state !== 'ON' && state !== 'OFF') {
-          console.warn(`[MQTT] Bỏ qua trạng thái không hợp lệ từ ${topic}: '${payload}'`);
-          return;
-        }
+          // 1. Lưu vào Database: Truyền chuỗi 'nowStr' vào
+          const sql = `INSERT INTO ${TELEMETRY_TABLE} (device_id, temp, humi, light, rain_mm, created_at) VALUES (?, ?, ?, ?, ?, ?)`;
+          await db.query(sql, [deviceId, temp, humi, light, rain, nowStr]);
 
-        // Map deviceId (led1|led2|led3) -> tên hiển thị nhất quán trong DB
-
-        const nameMap = { led1: 'Đèn', led2: 'Quạt', led3: 'Điều hòa' };
-        const mappedName = nameMap[deviceId] || deviceId;
-        const sql = `INSERT INTO ${COMMANDS_TABLE} (device, status, created_at) VALUES (?, ?, ?)`;
-        await db.query(sql, [mappedName, state, new Date()]);
-        console.log(`[DB] Đã lưu trạng thái ${mappedName} = ${state}`);
-      } catch (dbErr) {
-
-        console.error('[DB] Lỗi lưu trạng thái thiết bị:', dbErr.message || dbErr);
+          // 2. Gửi realtime: Gửi luôn chuỗi này xuống Web cho đồng bộ
+          if (io) {
+              io.emit('new_telemetry', {
+                  deviceId, temp, humi, light, rain,
+                  created_at: nowStr 
+              });
+          }
+      } catch (err) {
+          console.error('[MQTT] Lỗi xử lý dataSensor:', err.message);
       }
-    }
-    // Xử lý khi ESP hỏi trạng thái
-
-    else if (topic.includes('/get_state')) {
-
-        const deviceId = topic.split('/')[1];
-
-        console.log(`[MQTT] Thiết bị ${deviceId} đang hỏi trạng thái. Khôi phục led1-3 từ DB`);
-
-        try {
-            const nameByLed = { led1: 'Đèn', led2: 'Quạt', led3: 'Điều hòa' };
-            // Lấy trạng thái gần nhất cho từng thiết bị hiển thị trong DB
-            const targets = [
-              { led: 'led1', name: 'Đèn' },
-              { led: 'led2', name: 'Quạt' },
-              { led: 'led3', name: 'Điều hòa' },
-            ];
-
-            for (const t of targets) {
-              const sql = `SELECT status FROM ${COMMANDS_TABLE} WHERE device = ? ORDER BY created_at DESC LIMIT 1`;
-              const rows = await db.query(sql, [t.name]);
-              if (rows.length > 0) {
-                const desiredState = String(rows[0].status || '').toUpperCase();
-                const topic = `control/${t.led}`;
-                // Publish không retain để tránh áp dụng về sau nếu offline
-                mqttClient.publish(topic, desiredState, { qos: 1, retain: false });
-                console.log(`[MQTT]  Restore ${t.led} = ${desiredState}`);
-              } else {
-                console.log(`[DB] Chưa có trạng thái trước đó cho ${t.name}`);
-              }
-            }
-        } catch (dbError) {
-            console.error(`[DB] Lỗi khi khôi phục trạng thái cho ${deviceId}:`, dbError);
-        }
-
-    }
-
-  });
-
- 
-
-  return mqttClient;
-
-}
-
-
-
-// Hàm publish lệnh KHÔNG DÙNG RETAIN
-
-function publishDeviceCommand(device, status) {
-
-  if (!mqttClient || !mqttClient.connected) {
-
-    return { success: false, error: 'MQTT client not connected' };
-
   }
 
- 
+    // === XỬ LÝ TRẠNG THÁI ĐÈN (Giữ nguyên) ===
+  
+  else if (topic.startsWith('device/') && topic.endsWith('/state')) {
+    const deviceId = topic.split('/')[1];
+    
+    // 1. Gửi SocketIO để giao diện cập nhật ngay (Giữ nguyên)
+    if (io) {
+      io.emit('ledStateChange', { device: deviceId, state: payloadStr });
+      console.log(`[Socket] Gửi ledStateChange: ${deviceId} -> ${payloadStr}`);
+    }
+    
+    // 2. Lưu trạng thái vào DB (CÓ KIỂM TRA TRÙNG LẶP)
+    try {
+      const state = String(payloadStr).trim().toUpperCase();
+      // Chỉ xử lý nếu là ON hoặc OFF
+      if (state === 'ON' || state === 'OFF') {
+          const nameMap = { led1: 'Đèn', led2: 'Quạt', led3: 'Điều hòa' };
+          const mappedName = nameMap[deviceId] || deviceId;
 
-  const deviceMap = {
+          // --- BƯỚC KIỂM TRA MỚI ---
+          // Lấy trạng thái gần nhất trong DB ra xem
+          const checkSql = `SELECT status FROM ${COMMANDS_TABLE} WHERE device = ? ORDER BY created_at DESC LIMIT 1`;
+          const rows = await db.query(checkSql, [mappedName]);
 
-    'đèn': 'control/led1', 'quạt': 'control/led2', 'điều hòa': 'control/led3',
+          // Chỉ lưu nếu chưa có dữ liệu HOẶC trạng thái mới KHÁC trạng thái cũ
+          if (rows.length === 0 || rows[0].status !== state) {
+              const insertSql = `INSERT INTO ${COMMANDS_TABLE} (device, status, created_at) VALUES (?, ?, NOW())`;
+              await db.query(insertSql, [mappedName, state]);
+              console.log(`[DB] Đã lưu trạng thái mới: ${mappedName} -> ${state}`);
+          } else {
+              // Bỏ qua, không làm gì cả
+              // console.log(`[DB] Bỏ qua trạng thái trùng lặp: ${mappedName} vẫn là ${state}`);
+          }
+      }
+    } catch (dbErr) { console.error('[DB] Lỗi lưu trạng thái:', dbErr.message); }
+  }
 
-    'led1': 'control/led1', 'led2': 'control/led2', 'led3': 'control/led3'
+    // === XỬ LÝ SYNC TRẠNG THÁI (Giữ nguyên) ===
+    else if (topic.includes('/get_state')) {
+        // Logic khôi phục trạng thái cũ (giữ nguyên như code cũ của bạn)
+        const targets = [
+            { led: 'led1', name: 'Đèn' },
+            { led: 'led2', name: 'Quạt' },
+            { led: 'led3', name: 'Điều hòa' },
+        ];
+        for (const t of targets) {
+            const rows = await db.query(`SELECT status FROM ${COMMANDS_TABLE} WHERE device = ? ORDER BY created_at DESC LIMIT 1`, [t.name]);
+            if (rows.length > 0) {
+                mqttClient.publish(`control/${t.led}`, String(rows[0].status).toUpperCase(), { qos: 1, retain: false });
+            }
+        }
+    }
+  });
 
-  };
-
- 
-
-  const topic = deviceMap[device.toLowerCase()] || `control/${device.toLowerCase()}`;
-
-  const payload = status.toUpperCase();
-
- 
-
-  // Không dùng retain cho lệnh điều khiển từ web để tránh áp dụng sau khi ESP cắm lại
-
-  mqttClient.publish(topic, payload, { qos: 1, retain: false });
-
-  console.log('[MQTT]  Published command:', { topic, payload, retain: false });
-
-  return { success: true };
-
+  return mqttClient;
 }
 
+function publishDeviceCommand(device, status) {
+  // Giữ nguyên logic cũ
+  if (!mqttClient || !mqttClient.connected) return { success: false, error: 'MQTT disconnected' };
+  const deviceMap = { 'đèn': 'control/led1', 'quạt': 'control/led2', 'điều hòa': 'control/led3', 'led1': 'control/led1', 'led2': 'control/led2', 'led3': 'control/led3' };
+  const topic = deviceMap[device.toLowerCase()] || `control/${device.toLowerCase()}`;
+  mqttClient.publish(topic, status.toUpperCase(), { qos: 1, retain: false });
+  return { success: true };
+}
 
-
-module.exports = {
-
-  initializeMqttClient,
-
-  publishDeviceCommand,
-
-  // Publish rain threshold to a retained config topic so late subscribers get it
-  publishRainThreshold: (threshold) => {
-    if (!mqttClient || !mqttClient.connected) {
-      return { success: false, error: 'MQTT client not connected' };
-    }
-    const topic = 'config/rain_threshold';
-    const payload = String(threshold);
-    mqttClient.publish(topic, payload, { qos: 1, retain: true });
-    console.log('[MQTT]  Published rain threshold:', { topic, payload, retain: true });
+function publishRainThreshold(threshold) {
+    // Giữ nguyên logic cũ
+    if (!mqttClient || !mqttClient.connected) return { success: false };
+    mqttClient.publish('config/rain_threshold', String(threshold), { qos: 1, retain: true });
     return { success: true };
-  },
+}
 
-};
+module.exports = { initializeMqttClient, publishDeviceCommand, publishRainThreshold };
