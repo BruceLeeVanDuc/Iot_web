@@ -22,9 +22,7 @@ Fe iot/
     ├── profile.js
     └── style.css
 ```
-
-## 🚀 Cách chạy dự án
-
+##  Cách chạy dự án
 ### Yêu cầu hệ thống
 - Node.js (phiên bản 14.0.0 trở lên)
 - npm hoặc yarn
@@ -43,11 +41,10 @@ Hoặc chạy với nodemon (tự động restart khi có thay đổi):
 ```bash
 npm run dev
 ```
-
 ### Bước 3: Truy cập ứng dụng
 Mở trình duyệt và truy cập: **http://localhost:3000**
 
-## 📱 Các trang có sẵn
+## Các trang có sẵn
 
 | Trang | URL | Mô tả |
 |-------|-----|-------|
@@ -63,19 +60,11 @@ Mở trình duyệt và truy cập: **http://localhost:3000**
 -  Điều khiển thiết bị (quạt, đèn, điều hòa, bơm nước)
 -  Biểu đồ dữ liệu tương tác
 
-### Trang đăng ký (DangKy)
--  Form đăng ký tài khoản đầy đủ
--  Validation dữ liệu đầu vào
--  Giao diện hiện đại, responsive
--  Bảo mật mật khẩu
-
 ### Trang profile (Profile)
 -  Hiển thị thông tin cá nhân
 -  Thông tin sinh viên, quê quán
 -  Liên kết GitHub
--  Thiết kế theo phong cách Figma
--  
-## 🎨 Công nghệ sử dụng
+## Công nghệ sử dụng
 - **Frontend**: HTML5, CSS3, JavaScript (ES6+)
 - **Backend**: Node.js, Express.js
 - **Styling**: CSS Grid, Flexbox, CSS Variables
@@ -83,12 +72,6 @@ Mở trình duyệt và truy cập: **http://localhost:3000**
 - **Charts**: Canvas API
 - **CSDL**: MySQL
 
-## 📝 Scripts có sẵn
-
-```bash
-npm start          # Chạy server production
-npm run dev        # Chạy server development với nodemon
-```
 Để cập nhật dependencies:
 ```bash
 npm update
