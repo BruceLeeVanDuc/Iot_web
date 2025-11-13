@@ -1,7 +1,5 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
-#include <HTTPClient.h>
-#include <ArduinoJson.h>
 #include <DHT.h>
 
 // =====================
@@ -9,9 +7,6 @@
 // =====================
 #define WIFI_SSID "BruceLeeDuc"
 #define WIFI_PASSWORD "66662222"
-#define SERVER_IP "172.20.10.3"  // IP máy tính chạy server
-#define SERVER_PORT 3000
-#define API_TOKEN ""
 
 // MQTT Config (cho LED control)
 #define MQTT_SERVER "172.20.10.3"
@@ -70,41 +65,13 @@ void setup_wifi() {
 }
 
 // =====================
-// Hàm gửi dữ liệu sensor qua HTTP API + MQTT (thêm rain_mm)
+// Hàm gửi dữ liệu sensor qua MQTT (server sẽ lưu vào database)
 // =====================
 void sendSensorData(float temp, float humi, int light, float rainMm) {
-  // 1. Gửi qua HTTP API (để lưu vào database)
-  HTTPClient http;
-  String url = "http://" + String(SERVER_IP) + ":" + String(SERVER_PORT) + "/api/telemetry";
-  
-  http.begin(url);
-  http.addHeader("Content-Type", "application/json");
-  http.addHeader("x-api-token", API_TOKEN);
-  
-  DynamicJsonDocument doc(1024);
-  doc["deviceId"] = DEVICE_ID;
-  doc["data"]["temp"] = temp;
-  doc["data"]["humi"] = humi;
-  doc["data"]["light"] = light;
-  doc["data"]["rain_mm"] = rainMm;
-  // Không gửi timestamp, để server tự tạo theo giờ Việt Nam
-  
-  String payload;
-  serializeJson(doc, payload);
-  
-  Serial.println("📤 Gửi dữ liệu sensor qua HTTP API:");
-  int httpResponseCode = http.POST(payload);
-  
-  if (httpResponseCode > 0) {
-    Serial.printf("✅ HTTP Response: %d\n", httpResponseCode);
-  } else {
-    Serial.printf("❌ HTTP Error: %d\n", httpResponseCode);
-  }
-  http.end();
-  
-  // 2. Gửi qua MQTT (cho real-time display)
-  char mqttPayload[192];
-  snprintf(mqttPayload, sizeof(mqttPayload), "{\"temp\":%.1f,\"humi\":%.1f,\"light\":%d,\"rain_mm\":%.2f}", temp, humi, light, rainMm);
+  // Gửi qua MQTT (server sẽ tự động lưu vào database và emit qua socket.io)
+  char mqttPayload[256];
+  snprintf(mqttPayload, sizeof(mqttPayload), "{\"deviceId\":\"%s\",\"temp\":%.1f,\"humi\":%.1f,\"light\":%d,\"rain_mm\":%.2f}", 
+           DEVICE_ID, temp, humi, light, rainMm);
   client.publish("dataSensor", mqttPayload);
   Serial.println("📡 Gửi qua MQTT: dataSensor -> " + String(mqttPayload));
 }

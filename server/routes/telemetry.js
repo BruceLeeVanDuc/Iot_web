@@ -2,10 +2,6 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { requireApiToken } = require('../middleware/auth');
-const { EventEmitter } = require('events');
-
-// Simple in-process event bus for telemetry realtime
-const telemetryBus = new EventEmitter();
 
 // Table names from env with sensible defaults
 const TELEMETRY_TABLE = process.env.TABLE_TELEMETRY || 'telemetry';
@@ -65,78 +61,6 @@ async function ensureRainColumn() {
     }
 }
 ensureRainColumn().catch(() => {});
-
-// POST /api/telemetry -> ingest telemetry from ESP32
-router.post('/telemetry', requireApiToken, async (req, res) => {
-    try {
-        const { deviceId, data, timestamp } = req.body || {};
-        
-        if (!deviceId) {
-            return res.status(400).json({ error: 'deviceId is required' });
-        }
-        
-        const { temp, humi, light, rain_mm } = data || {};
-        // Lưu timestamp theo UTC. Không cộng thêm múi giờ; FE sẽ hiển thị theo Asia/Ho_Chi_Minh
-        const createdAt = timestamp ? new Date(timestamp) : new Date();
-        const tryInsert = async () => {
-            const sql = `INSERT INTO ${TELEMETRY_TABLE} (device_id, temp, humi, light, rain_mm, created_at) VALUES (?, ?, ?, ?, ?, ?)`;
-            const params = [deviceId, temp || 0, humi || 0, light || 0, rain_mm || 0, createdAt];
-            return db.query(sql, params);
-        };
-        
-        // Debug log: inbound payload and client IP
-        const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
-        console.log(`[Telemetry] POST from ${ip} deviceId=${deviceId} data=`, data);
-
-        let result;
-        try {
-            result = await tryInsert();
-        } catch (e) {
-            // If missing column, try to add then retry once
-            const msg = String(e?.message || '');
-            if (msg.includes('Unknown column') || msg.includes('ER_BAD_FIELD_ERROR')) {
-                await ensureRainColumn();
-                result = await tryInsert();
-            } else {
-                throw e;
-            }
-        }
-        
-        // Emit realtime event for SSE subscribers
-        telemetryBus.emit('new', {
-            id: result.insertId,
-            deviceId,
-            temp: temp || 0,
-            humi: humi || 0,
-            light: light || 0,
-            rain: rain_mm || 0,
-            createdAt: createdAt.toISOString()
-        });
-
-        console.log('[Telemetry] Inserted row id =', result.insertId);
-
-        // Return success with input data for verification
-        return res.json({ 
-            success: true, 
-            id: result.insertId,
-            input: {
-                deviceId,
-                data: {
-                    temperature: temp,
-                    humidity: humi,
-                    light: light,
-                    rain: rain_mm
-                },
-                timestamp: createdAt.toISOString()
-            },
-            message: 'Dữ liệu đã được lưu thành công'
-        });
-        
-    } catch (err) {
-        logError('Telemetry ingest error', err);
-        return res.status(500).json({ error: 'Internal Server Error' });
-    }
-});
 
 // GET /api/telemetry -> list telemetry with filters
 router.get('/telemetry', async (req, res) => {
@@ -371,33 +295,6 @@ router.post('/telemetry/copy-time', requireApiToken, async (req, res) => {
         console.error('Copy time error', err);
         return res.status(500).json({ error: 'Internal Server Error' });
     }
-});
-
-// GET /api/telemetry/stream -> Server-Sent Events for real-time telemetry
-router.get('/telemetry/stream', requireApiToken, async (req, res) => {
-    // Setup SSE headers
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.flushHeaders && res.flushHeaders();
-
-    // Heartbeat to keep connection alive
-    const heartbeat = setInterval(() => {
-        try { res.write(`: ping\n\n`); } catch (_) {}
-    }, 25000);
-
-    // Listener for new telemetry events
-    const onNewTelemetry = (payload) => {
-        try { res.write(`data: ${JSON.stringify(payload)}\n\n`); } catch (_) {}
-    };
-    telemetryBus.on('new', onNewTelemetry);
-
-    // Cleanup on client disconnect
-    req.on('close', () => {
-        clearInterval(heartbeat);
-        telemetryBus.off('new', onNewTelemetry);
-        try { res.end(); } catch (_) {}
-    });
 });
 
 // GET /api/telemetry/rain/aggregate -> aggregate rainfall by hour/day

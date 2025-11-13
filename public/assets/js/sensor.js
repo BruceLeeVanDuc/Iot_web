@@ -720,44 +720,39 @@ document.addEventListener("DOMContentLoaded", () => {
   // tìm kiếm
   document.querySelector(".filters button").addEventListener("click", searchData);
 
-  // Thiết lập SSE để nhận realtime; fallback sang polling nếu lỗi
-  try {
-    const token = localStorage.getItem('apiToken') || '';
-    const es = new EventSource(`/api/telemetry/stream?token=${encodeURIComponent(token)}`);
+// === THAY THẾ SSE BẰNG SOCKET.IO ===
+  // Kết nối Socket
+  const socket = io();
 
-    es.onmessage = (e) => {
-      try {
-        // Nếu đang ở chế độ tìm kiếm (sensor hoặc any), bỏ qua chèn realtime để không làm lệch kết quả
-        if (currentSensorSearch) return;
-        const payload = JSON.parse(e.data);
-        // Map về format FE đang dùng
-        const mapped = mapSensorData({
-          id: payload.id || Date.now(),
-          temperature: payload.temp,
-          humidity: payload.humi,
-          light: payload.light,
-          rain: payload.rain,
-          createdAt: payload.createdAt
-        });
-        // Thêm lên đầu danh sách
-        sensorData.unshift(mapped);
-        filteredData = [...sensorData];
-        currentPage = 1;
-        renderTable();
-      } catch (_) {}
-    };
+  socket.on('connect', () => {
+    console.log('[Socket Sensor] Đã kết nối!');
+  });
 
-    es.onerror = () => {
-      // Nếu stream lỗi, đóng và bật polling mỗi 10s
-      try { es.close(); } catch (_) {}
-      if (!refreshTimerId && !currentSensorSearch) {
-        refreshTimerId = setInterval(() => { loadSensorData(false); }, 10000);
-      }
-    };
-  } catch (_) {
-    // Fallback polling nếu trình duyệt không hỗ trợ EventSource
-    if (!refreshTimerId && !currentSensorSearch) {
-      refreshTimerId = setInterval(() => { loadSensorData(false); }, 10000);
+  // Lắng nghe sự kiện 'new_telemetry' từ Server (mqtt.js bắn ra)
+  socket.on('new_telemetry', (payload) => {
+    // Nếu đang tìm kiếm/lọc thì không chèn dữ liệu mới để tránh rối mắt
+    if (currentSensorSearch || currentSearchTerm) return;
+
+    console.log('📡 Nhận data mới:', payload);
+
+    // Map dữ liệu về format của bảng
+    // Lưu ý: Payload từ MQTT server gửi xuống đã có sẵn created_at chuẩn
+    const mapped = mapSensorData({
+      id: payload.id || '(Mới)', // ID có thể chưa có ngay nếu DB chậm, hoặc server trả về insertId
+      temperature: payload.temp,
+      humidity: payload.humi,
+      light: payload.light,
+      rain: payload.rain,
+      createdAt: payload.created_at // Dùng thời gian server gửi xuống
+    });
+
+    // Thêm vào đầu mảng dữ liệu
+    sensorData.unshift(mapped);
+    filteredData = [...sensorData];
+    
+    // Nếu đang ở trang 1 thì render lại ngay
+    if (currentPage === 1) {
+      renderTable();
     }
-  }
+  });
 });
