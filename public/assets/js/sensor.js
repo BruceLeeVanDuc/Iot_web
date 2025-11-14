@@ -523,7 +523,7 @@ async function searchData() {
     return;
   }
   
-  // Trường hợp người dùng để select = "Trong Sensor" (id) nhưng nhập số -> tìm trên cả temp/humi/light (bỏ qua nhận diện thời gian)
+  // Trường hợp người dùng để select = "Trong Sensor"  nhưng nhập số -> tìm trên cả temp/humi/light (bỏ qua nhận diện thời gian)
   if (isNumeric && selectedField === 'id') {
     currentSensorSearch = { field: 'any', value: Number(input) };
     currentSearchTerm = '';
@@ -545,9 +545,6 @@ async function searchData() {
   } else {
     console.log(`Không parse được thời gian từ: "${input}". Các format hỗ trợ: YYYY-MM-DD, DD-MM-YYYY, MM-YYYY, HH:MM:SS, DD-MM-YYYY HH:MM:SS`);
   }
-  
-  // Tạo URL since/until bằng logic parse sẵn có trong applyCurrentSearch -> tạm thời dùng local để giữ behavior
-  // Ở đây chuyển sang API: gọi lại load để phía trên tự thêm filter nếu cần
   await loadSensorData();
   
 }

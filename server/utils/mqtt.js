@@ -43,7 +43,6 @@ function initializeMqttClient(socketIoInstance) {
   mqttClient.on('message', async (topic, message) => {
     const payloadStr = message.toString();
     
-    // === XỬ LÝ DỮ LIỆU CẢM BIẾN (Mới thêm) ===
     // === XỬ LÝ DỮ LIỆU CẢM BIẾN ===
     if (topic === 'dataSensor') {
       try {

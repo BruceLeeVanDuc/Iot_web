@@ -151,7 +151,7 @@ function setupWebSocketListeners() {
     updateSwitchUI(data.device, data.state);
   });
 
-  // 2. Nhận dữ liệu cảm biến (Realtime thay thế Polling)
+  // 2. Nhận dữ liệu cảm biến 
   socket.on('new_telemetry', (data) => {
     console.log('📡 Socket Sensor:', data);
     renderSensorData(data);
