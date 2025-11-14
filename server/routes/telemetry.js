@@ -126,49 +126,6 @@ router.get('/telemetry/latest', requireApiToken, async (req, res) => {
     }
 });
 
-// GET /api/telemetry/stats -> get telemetry statistics
-router.get('/telemetry/stats', requireApiToken, async (req, res) => {
-    try {
-        const { deviceId, hours = 24 } = req.query;
-        
-        const hoursAgo = new Date(Date.now() - (Number(hours) * 60 * 60 * 1000));
-        
-        let sql = `SELECT 
-                     AVG(temp) as avgTemperature,
-                     MAX(temp) as maxTemperature,
-                     MIN(temp) as minTemperature,
-                     AVG(humi) as avgHumidity,
-                     MAX(humi) as maxHumidity,
-                     MIN(humi) as minHumidity,
-                     AVG(light) as avgLight,
-                     MAX(light) as maxLight,
-                     MIN(light) as minLight,
-                     AVG(rain_mm) as avgRain,
-                     MAX(rain_mm) as maxRain,
-                     MIN(rain_mm) as minRain,
-                     COUNT(*) as recordCount
-                   FROM ${TELEMETRY_TABLE} 
-                   WHERE created_at >= ?`;
-        
-        const params = [hoursAgo];
-        
-        if (deviceId) {
-            sql += ' AND device_id = ?';
-            params.push(deviceId);
-        }
-        
-        const rows = await db.query(sql, params);
-        
-        if (rows.length === 0) {
-            return res.status(404).json({ error: 'No telemetry data found' });
-        }
-        
-        return res.json(rows[0]);
-    } catch (err) {
-        logError('Telemetry stats error', err);
-        return res.status(500).json({ error: 'Internal Server Error' });
-    }
-});
 
 // GET /api/telemetry/search -> search exact (no tolerance) by a specific column (temp/humi/light)
 router.get('/telemetry/search', requireApiToken, async (req, res) => {
@@ -297,50 +254,5 @@ router.post('/telemetry/copy-time', requireApiToken, async (req, res) => {
     }
 });
 
-// GET /api/telemetry/rain/aggregate -> aggregate rainfall by hour/day
-router.get('/telemetry/rain/aggregate', requireApiToken, async (req, res) => {
-    try {
-        const { deviceId, from, to, interval = 'hour' } = req.query;
-
-        const { where, params } = buildWhereClause({ deviceId, since: from, until: to });
-
-        const intv = String(interval).toLowerCase();
-        let sql;
-        if (intv === 'day') {
-            const by = '%Y-%m-%d';
-            sql = `SELECT 
-                        DATE_FORMAT(created_at, '${by}') AS bucket,
-                        SUM(rain_mm) AS totalRain
-                   FROM ${TELEMETRY_TABLE}
-                   ${where}
-                   GROUP BY bucket
-                   ORDER BY bucket ASC`;
-        } else if (intv === '5min' || intv === '5m') {
-            // Bucket theo 5 phút dùng UNIX_TIMESTAMP để làm tròn xuống bội số của 300 giây
-            sql = `SELECT 
-                        DATE_FORMAT(FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(created_at)/300)*300), '%Y-%m-%d %H:%i:00') AS bucket,
-                        SUM(rain_mm) AS totalRain
-                   FROM ${TELEMETRY_TABLE}
-                   ${where}
-                   GROUP BY bucket
-                   ORDER BY bucket ASC`;
-        } else {
-            const by = '%Y-%m-%d %H:00:00';
-            sql = `SELECT 
-                        DATE_FORMAT(created_at, '${by}') AS bucket,
-                        SUM(rain_mm) AS totalRain
-                   FROM ${TELEMETRY_TABLE}
-                   ${where}
-                   GROUP BY bucket
-                   ORDER BY bucket ASC`;
-        }
-
-        const rows = await db.query(sql, params);
-        return res.json(rows.map(r => ({ bucket: r.bucket, totalRain: Number(r.totalRain || 0) })));
-    } catch (err) {
-        logError('Rain aggregate error', err);
-        return res.status(500).json({ error: 'Internal Server Error' });
-    }
-});
 
 module.exports = router;

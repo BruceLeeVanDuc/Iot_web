@@ -1,7 +1,5 @@
 // API endpoint
 const API_BASE = `${location.origin}/api`;
-
-// Token helpers (reuse simple approach like home.js)
 function getUrlToken() {
   try { const u = new URL(location.href); return u.searchParams.get('token'); } catch (_) { return null; }
 }
@@ -62,10 +60,7 @@ async function loadSensorData(showLoading = false, forceRefresh = false) {
       filteredData = [...sensorData];
       renderTable();
       return;
-    }
-    
-    // Tạo URL với tham số sort
-    // tải số bản ghi tối đa 1000
+    } 
     const fetchLimit = 1000;
     let url = `${API_BASE}/telemetry?deviceId=esp32-001&limit=${fetchLimit}`;
     // Nếu có chuỗi tìm kiếm theo thời gian -> gửi since/until để server lọc
@@ -108,14 +103,6 @@ async function loadSensorData(showLoading = false, forceRefresh = false) {
     // Loading removed
   }
 }
-
-// Auto refresh mỗi 5 giây để luôn nhận bản ghi mới nhất
-try {
-  if (refreshTimerId) clearInterval(refreshTimerId);
-  refreshTimerId = setInterval(() => {
-    loadSensorData(false, true);
-  }, 1000);
-} catch (_) {}
 // Map sensor data to standardized format
 function mapSensorData(item) {
   const createdAtDate = new Date(item.createdAt);
@@ -347,206 +334,134 @@ function updateSortIndicators() {
     }
   });
 }
+// Tìm kiếm thời fian
+// Kích hoạt plugin
+dayjs.extend(dayjs_plugin_customParseFormat);
+dayjs.extend(dayjs_plugin_utc);
+dayjs.extend(dayjs_plugin_timezone);
 
+// Múi giờ Việt Nam
+const TZ = 'Asia/Ho_Chi_Minh';
 
-// Tìm kiếm theo thời gian - sửa timezone
+// Các định dạng hỗ trợ
+const PARSERS = [
+  { format: 'YYYY-MM-DD HH:mm:ss', unit: 's' },
+  { format: 'YYYY/MM/DD HH:mm:ss', unit: 's' },
+  { format: 'YYYY-MM-DD HH:mm', unit: 'm' },
+  { format: 'YYYY/MM/DD HH:mm', unit: 'm' },
+  { format: 'YYYY-MM-DD', unit: 'd' },
+  { format: 'YYYY/MM/DD', unit: 'd' },
+  { format: 'DD-MM-YYYY HH:mm:ss', unit: 's' },
+  { format: 'DD/MM/YYYY HH:mm:ss', unit: 's' },
+  { format: 'DD-MM-YYYY HH:mm', unit: 'm' },
+  { format: 'DD/MM/YYYY HH:mm', unit: 'm' },
+  { format: 'DD-MM-YYYY', unit: 'd' },
+  { format: 'DD/MM/YYYY', unit: 'd' },
+  { format: 'MM-YYYY', unit: 'M' },
+  { format: 'MM/YYYY', unit: 'M' },
+  { format: 'HH:mm:ss', unit: 's', today: true },
+  { format: 'HH:mm', unit: 'm', today: true },
+  { format: 'HH', unit: 'h', today: true },
+];
+
 function buildSinceUntilFromInput(raw) {
   if (!raw) return { since: null, until: null };
   const str = raw.trim();
-  const s = str.replace(/\s+/g, '');
-  const now = new Date();
-  
-  // Hàm tạo Date với timezone Việt Nam (UTC+7) để khớp với dữ liệu DB
-  const createVietnamDate = (year, month, day, hour = 0, minute = 0, second = 0, ms = 0) => {
-    // Tạo Date theo giờ local trước
-    const localDate = new Date(year, month, day, hour, minute, second, ms);
-    // Chuyển từ giờ Việt Nam về UTC bằng cách trừ 7 giờ
-    return new Date(localDate.getTime() - (7 * 60 * 60 * 1000));
-  };
-  
-  const toIso = d => new Date(d).toISOString();
 
-  let m = s.match(/^(\d{4})[-\/]?(\d{1,2})[-\/]?(\d{1,2})$/);
-  if (m) {
-    const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
-    if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) {
-      return { 
-        since: toIso(createVietnamDate(y, mo - 1, d, 0, 0, 0, 0)), 
-        until: toIso(createVietnamDate(y, mo - 1, d, 23, 59, 59, 999)) 
-      };
+  for (const parser of PARSERS) {
+    let m;
+    if (parser.today) {
+      // Với format chỉ có thời gian (HH:mm:ss), parse theo giờ hiện tại
+      const now = dayjs().tz(TZ);
+      const timeParts = str.split(':');
+      let hour = parseInt(timeParts[0]) || 0;
+      let minute = parseInt(timeParts[1]) || 0;
+      let second = parseInt(timeParts[2]) || 0;
+      m = now.hour(hour).minute(minute).second(second).millisecond(0);
+    } else {
+      // Parse với format đầy đủ (có ngày tháng)
+      // Parse theo local time trước, sau đó set timezone
+      m = dayjs(str, parser.format, true);
+      if (m.isValid()) {
+        // Convert sang timezone VN, giả định input là local time của VN
+        m = dayjs.tz(m.format('YYYY-MM-DD HH:mm:ss'), TZ);
+      }
     }
-  }
-  m = s.match(/^(\d{1,2})[-\/]?(\d{1,2})[-\/]?(\d{4})$/);
-  if (m) {
-    const d = Number(m[1]), mo = Number(m[2]), y = Number(m[3]);
-    if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) {
-      return { 
-        since: toIso(createVietnamDate(y, mo - 1, d, 0, 0, 0, 0)), 
-        until: toIso(createVietnamDate(y, mo - 1, d, 23, 59, 59, 999)) 
-      };
-    }
-  }
-  m = s.match(/^(\d{1,2})[-\/]?(\d{4})$/);
-  if (m) {
-    const mo = Number(m[1]), y = Number(m[2]);
-    if (mo >= 1 && mo <= 12) {
-      return { 
-        since: toIso(createVietnamDate(y, mo - 1, 1, 0, 0, 0, 0)), 
-        until: toIso(createVietnamDate(y, mo, 0, 23, 59, 59, 999)) 
-      };
-    }
-  }
-  m = s.match(/^(\d{1,2})(?::(\d{1,2}))?(?::(\d{1,2}))?$/);
-  if (m) {
-    const h = Math.min(23, Math.max(0, Number(m[1])));
-    const mi = m[2] ? Math.min(59, Math.max(0, Number(m[2]))) : 0;
-    const se = m[3] ? Math.min(59, Math.max(0, Number(m[3]))) : 0;
-    
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = today.getMonth();
-    const day = today.getDate();
-    
-    // Nếu chỉ có giờ (không có phút) -> tìm cả giờ đó
-    if (!m[2]) {
-      return { 
-        since: toIso(createVietnamDate(year, month, day, h, 0, 0, 0)), 
-        until: toIso(createVietnamDate(year, month, day, h, 59, 59, 999)) 
-      };
-    }
-    // Nếu có giờ:phút (không có giây) -> tìm cả phút đó
-    if (!m[3]) {
-      return { 
-        since: toIso(createVietnamDate(year, month, day, h, mi, 0, 0)), 
-        until: toIso(createVietnamDate(year, month, day, h, mi, 59, 999)) 
-      };
-    }
-    // Nếu có đầy đủ giờ:phút:giây -> tìm chính xác giây đó
-    return { 
-      since: toIso(createVietnamDate(year, month, day, h, mi, se, 0)), 
-      until: toIso(createVietnamDate(year, month, day, h, mi, se, 999)) 
-    };
-  }
-  // Hỗ trợ YYYY-MM-DD HH:mm[:ss]
-  m = str.match(/^(\d{4})[-\/]?(\d{1,2})[-\/]?(\d{1,2})\s+(\d{1,2})(?::(\d{1,2}))?(?::(\d{1,2}))?$/);
-  if (m) {
-    const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
-    const h = Math.min(23, Number(m[4]));
-    const mi = m[5] ? Math.min(59, Number(m[5])) : 0;
-    const se = m[6] ? Math.min(59, Number(m[6])) : 0;
-    if (!m[5]) {
+
+    if (m && m.isValid()) {
       return {
-        since: toIso(createVietnamDate(y, mo - 1, d, h, 0, 0, 0)),
-        until: toIso(createVietnamDate(y, mo - 1, d, h, 59, 59, 999))
+        since: m.startOf(parser.unit).toISOString(),
+        until: m.endOf(parser.unit).toISOString(),
       };
     }
-    if (!m[6]) {
-      return {
-        since: toIso(createVietnamDate(y, mo - 1, d, h, mi, 0, 0)),
-        until: toIso(createVietnamDate(y, mo - 1, d, h, mi, 59, 999))
-      };
-    }
-    return {
-      since: toIso(createVietnamDate(y, mo - 1, d, h, mi, se, 0)),
-      until: toIso(createVietnamDate(y, mo - 1, d, h, mi, se, 999))
-    };
   }
-  m = str.match(/^(\d{1,2})[-\/]?(\d{1,2})[-\/]?(\d{4})\s+(\d{1,2})(?::(\d{1,2}))?(?::(\d{1,2}))?$/);
-  if (m) {
-    const d = Number(m[1]), mo = Number(m[2]), y = Number(m[3]);
-    const h = Math.min(23, Number(m[4]));
-    const mi = m[5] ? Math.min(59, Number(m[5])) : 0;
-    const se = m[6] ? Math.min(59, Number(m[6])) : 0;
-    
-    // Tương tự logic trên: tìm kiếm linh hoạt theo độ chi tiết
-    if (!m[5]) {
-      // Chỉ có giờ
-      return { 
-        since: toIso(createVietnamDate(y, mo - 1, d, h, 0, 0, 0)), 
-        until: toIso(createVietnamDate(y, mo - 1, d, h, 59, 59, 999)) 
-      };
-    }
-    if (!m[6]) {
-      // Có giờ:phút
-      return { 
-        since: toIso(createVietnamDate(y, mo - 1, d, h, mi, 0, 0)), 
-        until: toIso(createVietnamDate(y, mo - 1, d, h, mi, 59, 999)) 
-      };
-    }
-    // Có đầy đủ giờ:phút:giây
-    return { 
-      since: toIso(createVietnamDate(y, mo - 1, d, h, mi, se, 0)), 
-      until: toIso(createVietnamDate(y, mo - 1, d, h, mi, se, 999)) 
-    };
-  }
+
+  console.log('No pattern matched for input:', str);
   return { since: null, until: null };
 }
 
 // searchByTime đã loại bỏ
 // tìm kiếm tổng quát
+// Tìm kiếm tổng quát (phiên bản clean)
 async function searchData() {
   const input = document.getElementById("searchTime").value.trim();
-  const selectedField = document.getElementById("sortField").value; // dùng dropdown để chọn cột tìm kiếm
-  
-  // Kiểm tra xem input có phải là format thời gian không
-  const isTimeFormat = /^(\d{1,2})(?::\d{1,2})?(?::\d{1,2})?$/.test(input) || 
-                      /^(\d{4})[-\/]?\d{1,2}[-\/]?\d{1,2}$/.test(input) ||
-                      /^(\d{1,2})[-\/]?\d{1,2}[-\/]?\d{4}$/.test(input) ||
-                      /^(\d{1,2})[-\/]?\d{4}$/.test(input) ||
-                      /^(\d{1,2})[-\/]?\d{1,2}[-\/]?\d{4}\s+\d{1,2}(?::\d{1,2})?(?::\d{1,2})?$/.test(input) ||
-                      /^(\d{4})[-\/]?\d{1,2}[-\/]?\d{1,2}\s+\d{1,2}(?::\d{1,2})?(?::\d{1,2})?$/.test(input);
-  
-  // Nếu chọn "Thời Gian" -> luôn tìm theo thời gian
-  if (selectedField === 'time') {
-    isSensorSearch = false;
-    currentSensorSearch = null;
-    currentSearchTerm = input;
-    await loadSensorData();
-    return;
-  }
-  
-  // Nếu chọn một trong các cột sensor và input là số THUẦN (không phải format thời gian) -> gọi API search theo cột (bằng =)
+  const selectedField = document.getElementById("sortField").value;
   const isNumeric = /^-?\d+(?:\.\d+)?$/.test(input);
-  const validFields = ['temp', 'humi', 'light', 'rain'];
-  
-  // Ưu tiên tìm theo cảm biến nếu đã chọn temp/humi/light và input là số, BỎ QUA nhận diện thời gian
-  if (isNumeric && validFields.includes(selectedField)) {
-    currentSensorSearch = { field: selectedField, value: Number(input) };
-    currentSearchTerm = '';
-    // Khi tìm theo cảm biến: tắt auto-refresh để tránh nhảy dữ liệu
-    if (refreshTimerId) { 
-      clearInterval(refreshTimerId); 
-      refreshTimerId = null; 
-    }
-    isSensorSearch = true;
-    searchBySensorValue(selectedField, Number(input));
-    return;
-  }
-  
-  // Trường hợp người dùng để select = "Trong Sensor"  nhưng nhập số -> tìm trên cả temp/humi/light (bỏ qua nhận diện thời gian)
-  if (isNumeric && selectedField === 'id') {
-    currentSensorSearch = { field: 'any', value: Number(input) };
-    currentSearchTerm = '';
-    if (refreshTimerId) { clearInterval(refreshTimerId); refreshTimerId = null; }
-    isSensorSearch = true;
-    await searchAcrossSensors(Number(input));
-    return;
-  }
-  
-  // Ngược lại: tìm theo thời gian qua API (chỉ khi không phải số hoặc không chọn sensor fields)
+  const validSensorFields = ['temp', 'humi', 'light', 'rain'];
+
+  // 1. Reset trạng thái
   isSensorSearch = false;
   currentSensorSearch = null;
-  currentSearchTerm = input;
-  
-  // Debug: hiển thị thông tin tìm kiếm
-  const timeParse = buildSinceUntilFromInput(input);
-  if (timeParse.since || timeParse.until) {
-    console.log(`Tìm kiếm thời gian: "${input}" -> từ ${timeParse.since} đến ${timeParse.until}`);
-  } else {
-    console.log(`Không parse được thời gian từ: "${input}". Các format hỗ trợ: YYYY-MM-DD, DD-MM-YYYY, MM-YYYY, HH:MM:SS, DD-MM-YYYY HH:MM:SS`);
+  currentSearchTerm = '';
+
+  // ---
+  // ⭐️ LOGIC MỚI BẮT ĐẦU TỪ ĐÂY ⭐️
+  // ---
+
+  // TRƯỜNG HỢP 1: Người dùng chọn một cảm biến (Nhiệt, Ẩm...) VÀ nhập vào một SỐ
+  if (isNumeric && validSensorFields.includes(selectedField)) {
+    console.log(`Đang tìm kiếm theo CẢM BIẾN: ${selectedField} = ${input}`);
+    isSensorSearch = true;
+    currentSensorSearch = { field: selectedField, value: Number(input) };
+    
+    // (Đã xóa logic clear timer ở đây vì ta đã bỏ setInterval)
+    
+    // Gọi hàm tìm theo giá trị cảm biến
+    searchBySensorValue(selectedField, Number(input));
+    return; // Kết thúc
   }
-  await loadSensorData();
+
+  // TRƯỜNG HỢP 2: Người dùng chọn "Trong Sensor" (value="id") VÀ nhập vào một SỐ
+  if (isNumeric && selectedField === 'id') {
+    console.log(`Đang tìm kiếm TRONG TẤT CẢ CẢM BIẾN = ${input}`);
+    isSensorSearch = true;
+    currentSensorSearch = { field: 'any', value: Number(input) };
+
+    // Gọi hàm tìm kiếm "any"
+    await searchAcrossSensors(Number(input));
+    return; // Kết thúc
+  }
+
+  // TRƯỜNG HỢP 3: (Mặc định/Fallback) Tìm kiếm theo THỜI GIAN
+  // Các trường hợp lọt vào đây:
+  // - Người dùng chọn "Thời Gian" (bất kể nhập gì).
+  // - Người dùng chọn "Trong Sensor" nhưng nhập chữ (VD: "25/09/2025" hoặc "abc").
+  // - Người dùng chọn "Nhiệt Độ" nhưng nhập chữ (VD: "10:30" hoặc "abc").
   
+  console.log(`Đang tìm kiếm theo THỜI GIAN: "${input}"`);
+  currentSearchTerm = input;
+
+  // Chỉ gọi hàm buildSinceUntilFromInput để log ra console cho dễ debug
+  // Hàm loadSensorData() ở dưới mới là hàm thực sự gọi buildSinceUntilFromInput để lọc
+  const timeParse = buildSinceUntilFromInput(input);
+  if (timeParse.since) {
+    console.log(`Đã phân tích: ${timeParse.since} TỚI ${timeParse.until}`);
+  } else {
+    console.log(`Không nhận diện được thời gian: "${input}". (Sẽ trả về 0 kết quả)`);
+  }
+  
+  // Gọi hàm tải dữ liệu (hàm này sẽ tự động dùng currentSearchTerm để lọc)
+  await loadSensorData();
 }
 
 // gọi API tìm kiếm theo giá trị cảm biến đúng bằng (=)
@@ -713,11 +628,8 @@ document.addEventListener("DOMContentLoaded", () => {
       renderTable();
     });
   }
-
   // tìm kiếm
   document.querySelector(".filters button").addEventListener("click", searchData);
-
-// === THAY THẾ SSE BẰNG SOCKET.IO ===
   // Kết nối Socket
   const socket = io();
 
@@ -731,22 +643,19 @@ document.addEventListener("DOMContentLoaded", () => {
     if (currentSensorSearch || currentSearchTerm) return;
 
     console.log('📡 Nhận data mới:', payload);
-
     // Map dữ liệu về format của bảng
-    // Lưu ý: Payload từ MQTT server gửi xuống đã có sẵn created_at chuẩn
     const mapped = mapSensorData({
       id: payload.id || '(Mới)', // ID có thể chưa có ngay nếu DB chậm, hoặc server trả về insertId
       temperature: payload.temp,
       humidity: payload.humi,
       light: payload.light,
       rain: payload.rain,
-      createdAt: payload.created_at // Dùng thời gian server gửi xuống
+      createdAt: payload.created_at 
     });
 
     // Thêm vào đầu mảng dữ liệu
     sensorData.unshift(mapped);
     filteredData = [...sensorData];
-    
     // Nếu đang ở trang 1 thì render lại ngay
     if (currentPage === 1) {
       renderTable();

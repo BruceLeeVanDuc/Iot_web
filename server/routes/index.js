@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 const { setupCors } = require('../middleware/auth');
-const healthRoutes = require('./health');
+//const healthRoutes = require('./health');
 const telemetryRoutes = require('./telemetry');
 const controlRoutes = require('./control');
 
@@ -10,7 +10,7 @@ const controlRoutes = require('./control');
 setupCors(router);
 
 // Mount individual route modules at root so their internal paths remain the same
-router.use('/', healthRoutes);
+//router.use('/', healthRoutes);
 router.use('/', telemetryRoutes);
 router.use('/', controlRoutes);
 

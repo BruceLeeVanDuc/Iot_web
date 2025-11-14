@@ -32,9 +32,7 @@ let currentPage = 1;
 let itemsPerPage = 10;
 let filteredData = [];
 
-// =================================================================
 // ⭐️ HÀM XỬ LÝ THỜI GIAN NGẮN GỌN (DÙNG DAYJS)
-// =================================================================
 
 // Kích hoạt plugin
 dayjs.extend(dayjs_plugin_customParseFormat);
@@ -443,8 +441,4 @@ document.addEventListener('DOMContentLoaded', () => {
   if (statusSelect) {
     statusSelect.addEventListener("change", filterByDevice);
   }
-  // Không cần thêm event listener cho button "Tìm Kiếm" vì đã có onclick trong HTML
-
-  // pageSizeSelect được tạo động trong updatePaginationControls()
-  // Event listener được thêm trong updatePaginationControls() rồi
 });

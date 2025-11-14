@@ -135,7 +135,7 @@ function initializeMqttClient(socketIoInstance) {
             if (rows.length > 0) {
                 mqttClient.publish(`control/${t.led}`, String(rows[0].status).toUpperCase(), { qos: 1, retain: false });
             }
-        }
+        } 
     }
   });
 
@@ -143,7 +143,7 @@ function initializeMqttClient(socketIoInstance) {
 }
 
 function publishDeviceCommand(device, status) {
-  // Giữ nguyên logic cũ
+  
   if (!mqttClient || !mqttClient.connected) return { success: false, error: 'MQTT disconnected' };
   const deviceMap = { 'đèn': 'control/led1', 'quạt': 'control/led2', 'điều hòa': 'control/led3', 'led1': 'control/led1', 'led2': 'control/led2', 'led3': 'control/led3' };
   const topic = deviceMap[device.toLowerCase()] || `control/${device.toLowerCase()}`;
@@ -152,7 +152,7 @@ function publishDeviceCommand(device, status) {
 }
 
 function publishRainThreshold(threshold) {
-    // Giữ nguyên logic cũ
+    
     if (!mqttClient || !mqttClient.connected) return { success: false };
     mqttClient.publish('config/rain_threshold', String(threshold), { qos: 1, retain: true });
     return { success: true };
