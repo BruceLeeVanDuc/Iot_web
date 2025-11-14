@@ -61,7 +61,7 @@
   z-index: 1;
 }
 
-/* Wave animation */
+/* Wave animation Tạo hình sóng nước */
 .liquid-wave {
   position: absolute;
   top: -15px;  /* Tăng từ -10px lên -15px */
@@ -188,6 +188,15 @@
 
 .card-rain{
   background:linear-gradient(135deg,#c7f0ff 0%, #87ceeb 100%);
+}
+
+/* Trạng thái vượt ngưỡng - màu đỏ */
+.card-rain.threshold-exceeded{
+  background:linear-gradient(135deg,#ffcccc 0%, #ff6666 100%);
+}
+
+.card-rain.threshold-exceeded #rainLiquid{
+  background: #ef4444 !important;
 }
 
 /* Liquid colors - default states */

@@ -102,7 +102,25 @@ function renderSensorData(data) {
   }
   if (humi !== null) updateLiquidLevel('humiLiquid', humi * 0.7, getHumidColor(humi));
   if (light !== null) updateLiquidLevel('lightLiquid', (light / 5000) * 65, getLightColor(light));
-  if (rain !== null) updateLiquidLevel('rainLiquid', (rain / 1000) * 100, getRainColor(rain));
+  if (rain !== null) {
+    const threshold = Number(localStorage.getItem('rainThreshold_val')) || 0;
+    const rainCard = document.querySelector('.card-rain');
+    
+    // Kiểm tra vượt ngưỡng và đổi màu card
+    if (rainCard) {
+      if (rain > threshold) {
+        rainCard.classList.add('threshold-exceeded');
+        // Màu đỏ khi vượt ngưỡng
+        updateLiquidLevel('rainLiquid', (rain / 1000) * 100, '#ef4444');
+      } else {
+        rainCard.classList.remove('threshold-exceeded');
+        // Màu bình thường
+        updateLiquidLevel('rainLiquid', (rain / 1000) * 100, getRainColor(rain));
+      }
+    } else {
+      updateLiquidLevel('rainLiquid', (rain / 1000) * 100, getRainColor(rain));
+    }
+  }
 }
 
 // ===== WEBSOCKET LOGIC (FULL SOCKET) =====
