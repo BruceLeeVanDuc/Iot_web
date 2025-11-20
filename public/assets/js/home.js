@@ -271,18 +271,28 @@ async function initApp() {
   renderSensorData(latestData);
 
   // Khôi phục trạng thái nút bấm
-  ['led1', 'led2', 'led3'].forEach(k => {
-    const s = localStorage.getItem(`switch_${k}`);
-    if(s) updateSwitchUI(k, s);
-  });
-  
-  // Lấy trạng thái thật từ server (nếu có)
   try {
-    const states = await fetchDeviceStates();
-    if (states) Object.entries(states).forEach(([k, v]) => updateSwitchUI(k, v));
-  } catch (_) {}
-
-  console.log('✅ Home app initialized - SOCKET MODE (No Polling)');
+    const states = await fetchDeviceStates(); 
+    if (!states) return;
+  
+    console.log('🔄 Syncing states from DB:', states);
+  
+    const dbToFrontendMap = {
+      'đèn': 'led1',      
+      'quạt': 'led2',     
+      'điều hòa': 'led3'  
+    };
+  
+    Object.entries(states).forEach(([name, status]) => {
+      const id = dbToFrontendMap[name.toLowerCase()];
+      if (id) updateSwitchUI(id, status);
+    });
+  
+  } catch (err) {
+    console.error('Lỗi khi đồng bộ trạng thái thiết bị:', err);
+  }
+  
+  console.log('✅ Home app initialized - SOCKET & DB SYNC MODE');
 }
 
 document.addEventListener('DOMContentLoaded', initApp);
