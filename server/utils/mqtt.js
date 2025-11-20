@@ -104,7 +104,6 @@ function initializeMqttClient(socketIoInstance) {
           const nameMap = { led1: 'Đèn', led2: 'Quạt', led3: 'Điều hòa' };
           const mappedName = nameMap[deviceId] || deviceId;
 
-          // --- BƯỚC KIỂM TRA MỚI ---
           // Lấy trạng thái gần nhất trong DB ra xem
           const checkSql = `SELECT status FROM ${COMMANDS_TABLE} WHERE device = ? ORDER BY created_at DESC LIMIT 1`;
           const rows = await db.query(checkSql, [mappedName]);
@@ -115,8 +114,6 @@ function initializeMqttClient(socketIoInstance) {
               await db.query(insertSql, [mappedName, state]);
               console.log(`[DB] Đã lưu trạng thái mới: ${mappedName} -> ${state}`);
           } else {
-              // Bỏ qua, không làm gì cả
-              // console.log(`[DB] Bỏ qua trạng thái trùng lặp: ${mappedName} vẫn là ${state}`);
           }
       }
     } catch (dbErr) { console.error('[DB] Lỗi lưu trạng thái:', dbErr.message); }

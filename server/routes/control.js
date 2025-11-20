@@ -168,30 +168,5 @@ router.get('/device-states', requireApiToken, async (req, res) => {
     }
 });
 
-// DELETE /api/control/:id -> delete a command
-router.delete('/control/:id', requireApiToken, async (req, res) => {
-    try {
-        const { id } = req.params;
-        
-        const sql = `DELETE FROM ${COMMANDS_TABLE} WHERE id = ?`;
-        const result = await db.query(sql, [id]);
-        
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ error: 'Command not found' });
-        }
-        
-        return res.json({ success: true });
-        
-    } catch (err) {
-        const now = Date.now();
-        if (now - lastControlErrorTime > CONTROL_ERROR_COOLDOWN) {
-            console.error('Delete command error', err.message);
-            lastControlErrorTime = now;
-        }
-        return res.status(500).json({ error: 'Internal Server Error' });
-    }
-});
-
-
 module.exports = router;
 
