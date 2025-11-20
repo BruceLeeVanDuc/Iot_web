@@ -10,13 +10,9 @@ Fe iot/
 ├── package.json            # Cấu hình Node.js
 ├── README.md               # Hướng dẫn này
 ├── Trang_Chinh/            # Dashboard chính (trang chủ)
-│   ├── index.html
+│   ├── home.html
 │   ├── script.js
 │   └── style.css
-├── DangKy/                 # Trang đăng ký
-│   ├── register.html
-│   ├── auth.js
-│   └── auth.css
 └── Profile/                # Trang profile
     ├── my-profile.html
     ├── profile.js
