@@ -65,7 +65,7 @@ function getHumidColor(h) { return h < 30 ? '#fbbf24' : h < 60 ? '#06b6d4' : h <
 function getLightColor(l) { return l < 500 ? '#475569' : l < 1500 ? '#eab308' : l < 3000 ? '#f59e0b' : '#facc15'; }
 function getRainColor(r) { return r < 50 ? '#60a5fa' : r < 100 ? '#3b82f6' : r < 300 ? '#2563eb' : '#1e40af'; }
 
-// ===== LOGIC HIỂN THỊ SENSOR (Dùng chung cho HTTP & Socket) =====
+
 let previousValues = { temp: null };
 
 function renderSensorData(data) {

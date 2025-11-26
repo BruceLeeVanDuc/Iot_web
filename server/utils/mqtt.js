@@ -53,7 +53,7 @@ function initializeMqttClient(socketIoInstance) {
           const light = data.light || 0;
           const rain = data.rain_mm || 0;
           
-          // --- SỬA ĐỔI: Tự format thành chuỗi YYYY-MM-DD HH:mm:ss theo giờ VN ---
+        
           // Cách này ép cứng giờ VN, không phụ thuộc vào server hay driver nữa
           const d = new Date();
           const vnDate = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
